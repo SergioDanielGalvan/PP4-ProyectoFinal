@@ -6,11 +6,13 @@
 --  Tablas en minúsculas (portables entre Windows, Linux y TiDB);
 --  columnas con los mismos nombres que el modelo Access.
 --  Particiones: sólo pmax al crear; la carga mensual crea la del mes.
---  Compatible con TiDB (sin procedimientos ni FOREIGN KEY).
+--  Probado en MariaDB 10 (XAMPP) y MySQL 8. Compatible con TiDB (sin
+--  procedimientos ni FOREIGN KEY). Collation utf8mb4_unicode_ci: existe en
+--  MariaDB y en MySQL (utf8mb4_0900_ai_ci es sólo de MySQL 8).
 -- =====================================================================
 
 CREATE DATABASE IF NOT EXISTS comex
-  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 SET NAMES utf8mb4;
 USE comex;
 
@@ -88,7 +90,7 @@ CREATE TABLE destinaciones (
 -- Extra/Intra = extrazona/intrazona Mercosur (explica derechos en cero).
 CREATE TABLE posicion (
   IdPosicion                 SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  PosicionSIM                CHAR(10) CHARACTER SET ascii NOT NULL UNIQUE,
+  PosicionSIM                VARCHAR(10) CHARACTER SET ascii NOT NULL UNIQUE,  -- VARCHAR: ver nota en caratula
   Capitulo                   CHAR(2)  CHARACTER SET ascii AS (LEFT(PosicionSIM, 2)) STORED,
   Partida                    CHAR(4)  CHARACTER SET ascii AS (LEFT(REPLACE(PosicionSIM, '.', ''), 4)) STORED,
   DescripcionNCM             TEXT,
@@ -122,7 +124,9 @@ CREATE TABLE importadores (
 CREATE TABLE caratula (
   Periodo              MEDIUMINT UNSIGNED NOT NULL,          -- AAAAMM
   IdOperacion           INT UNSIGNED NOT NULL AUTO_INCREMENT, -- reemplaza a NroAduana en item y liq
-  NroAduana            CHAR(16) CHARACTER SET ascii NOT NULL,
+  -- VARCHAR y no CHAR: MariaDB no permite columnas generadas sobre un CHAR,
+  -- porque su resultado depende del modo SQL PAD_CHAR_TO_FULL_LENGTH.
+  NroAduana            VARCHAR(16) CHARACTER SET ascii NOT NULL,
   AnioRegistro         CHAR(2)  CHARACTER SET ascii AS (SUBSTRING(NroAduana, 1, 2)) STORED,
   Destinacion          CHAR(4)  CHARACTER SET ascii AS (SUBSTRING(NroAduana, 6, 4)) STORED,
   AduanaOficializacion CHAR(3)  CHARACTER SET ascii AS (SUBSTRING(NroAduana, 3, 3)) STORED,

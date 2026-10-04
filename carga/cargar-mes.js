@@ -131,7 +131,7 @@ async function main() {
       for (const paso of CARGA) {
         t = Date.now();
         const [res] = await db.query(paso.sql, paso.params ? [periodo] : []);
-        const filas = Array.isArray(res) ? '' : ` ${num(res.affectedRows)} filas`;
+        const filas = Array.isArray(res) || /^\s*CALL/i.test(paso.sql) ? '' : ` ${num(res.affectedRows)} filas`;
         console.log(`   ${paso.titulo}:${filas} (${seg(t)})`);
       }
       const [[final]] = await db.query(CONTROL_FINAL, [periodo, periodo, periodo]);

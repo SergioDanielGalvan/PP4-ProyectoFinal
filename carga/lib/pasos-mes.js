@@ -27,7 +27,7 @@ const RUTINAS = [
    END`,
   'DROP FUNCTION IF EXISTS verificador_nro',
   // Dígito verificador (NroAduana_Valido, Rutinas.bas, VB6)
-  `CREATE FUNCTION verificador_nro(nro VARCHAR(16)) RETURNS CHAR(1) DETERMINISTIC
+  `CREATE FUNCTION verificador_nro(nro VARCHAR(16)) RETURNS CHAR(1) CHARACTER SET ascii DETERMINISTIC
    BEGIN
      DECLARE s VARCHAR(16) DEFAULT UPPER(LEFT(nro, 15));
      DECLARE expo BOOLEAN DEFAULT LOCATE('MANE', s) = 5;

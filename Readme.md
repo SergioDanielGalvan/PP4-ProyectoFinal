@@ -15,12 +15,15 @@ Son dos proyectos en un mismo repositorio, porque comparten el modelo de datos:
 
 ## Puesta en marcha
 
-Requisitos: MySQL 8 y Node 18 o superior. Comandos desde la carpeta raíz del
-repositorio (PowerShell o CMD, con `mysql` en el PATH).
+Requisitos: MariaDB 10.4 o superior (XAMPP) o MySQL 8, y Node 18 o superior.
+Comandos desde la carpeta raíz del repositorio. El cliente de XAMPP está en
+`F:\xampp\mysql\bin\mysql.exe`; en PowerShell el `<` no funciona, por eso
+los comandos que lo usan van dentro de `cmd /c "..."`.
 
 ```bash
-# 1. Usuarios (una vez, con root en el servidor; cambiar antes las claves)
-mysql -h 10.0.0.16 -u root -p < db/00_crear_usuarios.sql
+# 1. Usuarios (una vez; cambiar antes las claves). Con un usuario que pueda
+#    crear usuarios, o pegando el script en phpMyAdmin (pestaña SQL) en el servidor.
+cmd /c "F:\xampp\mysql\bin\mysql.exe -h 10.0.0.16 -u sergio -p < db\00_crear_usuarios.sql"
 
 # 2. Proyecto de carga
 cd carga
@@ -34,8 +37,8 @@ npm run mes -- E:/ARCA/202609.zip --validar  # sólo valida, no toca las tablas
 cd ..
 
 # (opcional) completar lo que falte del KIT y datos de prueba
-mysql -h 10.0.0.16 -u comex_admin -p --default-character-set=utf8mb4 < db/02_tablas_sim_kit.sql
-mysql -h 10.0.0.16 -u comex_admin -p --default-character-set=utf8mb4 < db/03_seed_demo.sql
+cmd /c "F:\xampp\mysql\bin\mysql.exe -h 10.0.0.16 -u comex_admin -p --default-character-set=utf8mb4 < db\02_tablas_sim_kit.sql"
+cmd /c "F:\xampp\mysql\bin\mysql.exe -h 10.0.0.16 -u comex_admin -p --default-character-set=utf8mb4 < db\03_seed_demo.sql"
 
 # 3. API y página de prueba
 cd api

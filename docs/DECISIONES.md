@@ -271,7 +271,22 @@ espacio en la nube ni consume la cuota mensual de Request Units.
   La API se conecta con el de lectura, así una falla en la API no puede
   modificar ni borrar datos.
 
-## 14. Datos que no van al repositorio
+## 14. Servidor: MariaDB 10.4 (XAMPP)
+
+El servidor del proyecto es MariaDB 10.4.32 (XAMPP), no MySQL 8. Todo se
+probó en MariaDB y en MySQL 8; las diferencias que obligaron a cambios:
+
+- **Collation `utf8mb4_unicode_ci`**: `utf8mb4_0900_ai_ci` es sólo de MySQL 8.
+- **`NroAduana` y `PosicionSIM` son VARCHAR**: MariaDB no permite columnas
+  generadas (aduana, destinación, año, capítulo) sobre un CHAR, porque el
+  resultado depende del modo SQL `PAD_CHAR_TO_FULL_LENGTH`. Cuesta 1 byte por
+  fila, sólo en `caratula` y `posicion`.
+- **`verificador_nro` devuelve `CHAR(1) CHARACTER SET ascii`**: si no, MariaDB
+  rechaza compararlo con `NroAduana` (ascii) por mezcla de collations.
+- **Sin `SET PERSIST`**: no existe en MariaDB. Tampoco hace falta: viene con
+  `local_infile` activado y el log binario desactivado.
+
+## 15. Datos que no van al repositorio
 
 Los `.LST`, los `.zip` de ARCA y las bases `.mdb` con datos de clientes o
 usuarios no se suben a GitHub (`.gitignore`).

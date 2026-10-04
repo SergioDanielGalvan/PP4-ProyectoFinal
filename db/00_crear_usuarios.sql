@@ -1,6 +1,6 @@
 -- =====================================================================
---  USUARIOS  (ejecutar una sola vez, con un usuario con permisos de
---  administración: root o el tuyo)
+--  USUARIOS  (ejecutar una sola vez, con un usuario que pueda crear
+--  usuarios: root en el servidor, o desde phpMyAdmin de XAMPP)
 --  mysql -h 10.0.0.16 -u <usuario> -p < db/00_crear_usuarios.sql
 --
 --  comex_admin: crea el esquema, carga los meses e importa el KIT.
@@ -24,9 +24,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX,
 
 GRANT SELECT ON comex.* TO 'comex_api'@'localhost', 'comex_api'@'10.0.0.%';
 
--- LOAD DATA LOCAL de la carga mensual. PERSIST: sobrevive a reinicios del servicio
-SET PERSIST local_infile = 1;
-
--- Con el log binario activo (default en MySQL 8), un usuario sin SUPER no
--- puede crear funciones (verificador_nro en la carga) salvo con esto:
-SET PERSIST log_bin_trust_function_creators = 1;
+-- Servidor: MariaDB 10.4 (XAMPP). No hace falta nada más:
+--   local_infile viene activado (LOAD DATA LOCAL de la carga mensual) y el
+--   log binario viene desactivado (permite crear la función del verificador).
+-- Si algún día se activa el log binario, agregar en my.ini, sección [mysqld]:
+--   log_bin_trust_function_creators = 1
+-- En MySQL 8 (no MariaDB) en cambio hay que ejecutar, como root:
+--   SET PERSIST local_infile = 1;
+--   SET PERSIST log_bin_trust_function_creators = 1;
