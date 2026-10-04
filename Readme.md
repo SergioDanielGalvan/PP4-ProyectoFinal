@@ -1,1 +1,89 @@
-Inicio
+# PP4 - Estadísticas de importación (ARCA)
+
+Base MySQL con la información agregada de comercio exterior que publica ARCA
+(archivos mensuales), más una API REST en Node.js con una página de consulta.
+
+Son dos proyectos en un mismo repositorio, porque comparten el modelo de datos:
+
+| Carpeta | Contenido |
+|---|---|
+| `carga/` | Proyecto 1: tablas del KIT desde Access (`npm run kit`, rara vez) y archivos mensuales de ARCA (`npm run mes`) |
+| `api/` | Proyecto 2: API REST (Express + MySQL) y página de prueba en `public/` |
+| `db/` | Scripts SQL compartidos: usuarios, esquema, KIT completo y datos de prueba |
+| `access/` | Modelo de diseño provisorio (`Estadisticas.mdb`, `Kit.mdb`) y módulos VBA |
+| `docs/` | Decisiones de diseño (`DECISIONES.md`), entregas y diagramas |
+
+## Puesta en marcha
+
+Requisitos: MySQL 8 y Node 18 o superior. Comandos desde la carpeta raíz del
+repositorio (PowerShell o CMD, con `mysql` en el PATH).
+
+```bash
+# 1. Usuarios (una vez, con root en el servidor; cambiar antes las claves)
+mysql -h 10.0.0.16 -u root -p < db/00_crear_usuarios.sql
+
+# 2. Proyecto de carga
+cd carga
+npm install
+copy .env.example .env       # completar la clave de comex_admin
+
+npm run base                 # una vez: crea la base y las tablas
+npm run kit                  # una vez y cuando cambie el KIT
+npm run mes -- E:/ARCA/202609.zip            # cada mes
+npm run mes -- E:/ARCA/202609.zip --validar  # sólo valida, no toca las tablas
+cd ..
+
+# (opcional) completar lo que falte del KIT y datos de prueba
+mysql -h 10.0.0.16 -u comex_admin -p --default-character-set=utf8mb4 < db/02_tablas_sim_kit.sql
+mysql -h 10.0.0.16 -u comex_admin -p --default-character-set=utf8mb4 < db/03_seed_demo.sql
+
+# 3. API y página de prueba
+cd api
+npm install
+copy .env.example .env      # completar la clave de comex_api
+npm run dev                 # http://localhost:3000/impo.html
+```
+
+`npm run base` ejecuta `db/01_schema.sql`; si la base ya existe no la toca
+(`--recrear` la borra con sus datos y la vuelve a crear). `npm run mes`
+controla antes de empezar que estén la base y el KIT, y si falta algo indica
+qué comando ejecutar.
+
+`npm run kit` lee el `.mdb` directamente (no hace falta Access ni ODBC). Agrega
+códigos nuevos y actualiza descripciones, pero no borra nada. Si `POSICION`
+todavía tiene aperturas SIM (16 caracteres), la reduce a subpartidas.
+
+`npm run mes` lee `impo_AAAAMM.lst` directamente del ZIP (sin descomprimirlo a
+disco), descarta el relleno de espacios y los encabezados, lo envía a MySQL,
+ejecuta las validaciones y carga `caratula`, `item` y `liq` en la partición
+del mes. Volver a cargar un mes lo reemplaza. Cada carga deja un informe en
+`carga/informes/impo_AAAAMM.md` con el resultado de cada validación.
+Referencia: 600 mil líneas (418 MB) tardan menos de un minuto; un mes real
+(5,7 GB) del orden de 15 a 25 minutos, según la PC y la red.
+
+## Endpoints de la API
+
+| Método y ruta | Parámetros | Devuelve |
+|---|---|---|
+| `GET /api/health` | | estado de la conexión |
+| `GET /api/impo/periodos` | | periodos cargados con cantidad de carátulas e ítems |
+| `GET /api/impo/destinaciones` | `periodo`, `importador`, `pagina`, `tamanio` | listado paginado |
+| `GET /api/impo/destinaciones/:nro` | | carátula con ítems y liquidación; acepta el número sin la letra y controla el verificador |
+| `GET /api/impo/ncm/:ncm/precios` | `periodo` | valor unitario mínimo, promedio y máximo por origen y unidad |
+| `GET /api/impo/ncm/:ncm/valores-bajos` | `periodo`, `umbral` (0-1), `limite` | ítems con valor unitario bajo el umbral del promedio |
+| `GET /api/impo/importadores` | `q` (mín. 3 letras), `periodo` | destinaciones, ítems y FOB |
+| `GET /api/impo/triangulaciones` | `periodo`, `limite` | ítems con origen distinto de la procedencia |
+
+`periodo` va como AAAAMM. La NCM se acepta con o sin puntos.
+
+## Modelo Access
+
+Para aplicar correcciones al modelo de diseño: copia de respaldo del `.mdb`,
+Alt+F11 > Archivo > Importar archivo > `access/CorregirEstadisticas.bas`, y
+ejecutar `CorregirEstadisticas`. `access/NroAduana.bas` agrega el cálculo del
+dígito verificador para usar en consultas.
+
+## Documentación
+
+Todas las decisiones de diseño, con el dato que las justifica, están en
+[`docs/DECISIONES.md`](docs/DECISIONES.md).

@@ -1,0 +1,22 @@
+# Dependencias
+node_modules/
+
+# Configuración con claves
+.env
+
+# Archivos de ARCA (pesan gigas; GitHub rechaza archivos de más de 100 MB)
+*.LST
+*.lst
+*.zip
+
+# Bloqueos de Access
+*.ldb
+*.laccdb
+
+# Sistema y editor
+Thumbs.db
+.DS_Store
+.vscode/
+
+# Informes de carga (se regeneran en cada carga)
+carga/informes/

@@ -1,34 +1,17 @@
 {
-  "name": "comex-impo",
+  "name": "comex-impo-carga",
   "version": "0.1.0",
-  "description": "API REST de estadísticas de importación (ARCA/AFIP) sobre MySQL",
-  "keywords": [
-    "Comercio Exterior",
-    "Estadísticas de Importaciones"
-  ],
-  "homepage": "https://github.com/SergioDanielGalvan/PP4-ProyectoFinal#readme",
-  "bugs": {
-    "url": "https://github.com/SergioDanielGalvan/PP4-ProyectoFinal/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/SergioDanielGalvan/PP4-ProyectoFinal.git"
-  },
-  "license": "MIT",
-  "author": "Mocosoft",
-  "type": "commonjs",
-  "main": "src/server.js",
-  "directories": {
-    "doc": "docs"
-  },
+  "description": "Carga de datos: tablas del KIT desde Access (rara vez) y archivos mensuales de ARCA",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "base": "node crear-base.js",
+    "kit": "node importar-kit.js",
+    "mes": "node cargar-mes.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
-    "express": "^4.21.0",
-    "mysql2": "^3.11.0"
+    "dotenv": "^16.6.1",
+    "mdb-reader": "^3.2.0",
+    "mysql2": "^3.24.5",
+    "yauzl": "^3.4.0"
   },
   "engines": {
     "node": ">=18"
