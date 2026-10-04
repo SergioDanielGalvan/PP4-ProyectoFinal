@@ -283,6 +283,13 @@ probó en MariaDB y en MySQL 8; las diferencias que obligaron a cambios:
   fila, sólo en `caratula` y `posicion`.
 - **`verificador_nro` devuelve `CHAR(1) CHARACTER SET ascii`**: si no, MariaDB
   rechaza compararlo con `NroAduana` (ascii) por mezcla de collations.
+- **La carga va en lotes**: un único `LOAD DATA` con el mes entero hizo que
+  el servidor cortara la conexión a los 5 millones de líneas. Ahora se envía
+  en lotes de 500.000 líneas (cada uno se confirma solo) y cada lote en
+  paquetes de 64 KB, por debajo del `max_allowed_packet` de 1 MB que trae
+  XAMPP. Probado con la configuración de fábrica de XAMPP (16 MB de buffer
+  pool, logs de 5 MB). Los ZIP de ARCA traen 645 bytes sobrantes al final;
+  el lector los ignora.
 - **Sin `SET PERSIST`**: no existe en MariaDB. Tampoco hace falta: viene con
   `local_infile` activado y el log binario desactivado.
 

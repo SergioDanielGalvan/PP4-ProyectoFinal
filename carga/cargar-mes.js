@@ -10,11 +10,13 @@
 // Recargar un mes ya cargado lo reemplaza. Deja un informe en informes/.
 const fs = require('fs');
 const path = require('path');
-const { pipeline } = require('stream/promises');
-const { PassThrough } = require('stream');
+const { Readable } = require('stream');
 const { conectar } = require('./lib/conexion');
 const { abrirArchivoImpo, LimpiadorLst } = require('./lib/lector-lst');
 const { RUTINAS, LOAD_DATA, VALIDACIONES, CARGA, CONTROL_FINAL } = require('./lib/pasos-mes');
+
+// Líneas por LOAD DATA (configurable con LINEAS_POR_LOTE en el .env)
+const LINEAS_POR_LOTE = Number(process.env.LINEAS_POR_LOTE || 500000);
 
 const mb = (b) => `${(b / 1024 / 1024).toLocaleString('es-AR', { maximumFractionDigits: 0 })} MB`;
 const num = (n) => Number(n).toLocaleString('es-AR');
@@ -74,24 +76,46 @@ async function main() {
       "SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'stg_impo' AND index_name = 'ix_stg' LIMIT 1");
     if (idx.length) await db.query('DROP INDEX ix_stg ON stg_impo');
 
+    // Se envía en lotes: cada LOAD DATA es una operación chica que se confirma
+    // sola. Uno solo de 8 millones de filas desborda un MariaDB de XAMPP.
+    await db.query('SET SESSION net_read_timeout = 600, net_write_timeout = 600');
     const limpiador = new LimpiadorLst();
-    const salida = new PassThrough();
+    let lotes = 0;
     const avance = setInterval(() => {
       const pct = archivo.bytes ? ` (${Math.round((100 * limpiador.bytesLeidos) / archivo.bytes)} %)` : '';
-      process.stdout.write(`\r  Leyendo: ${mb(limpiador.bytesLeidos)}${pct}, ${num(limpiador.lineas)} líneas   `);
+      process.stdout.write(`\r  Leyendo: ${mb(limpiador.bytesLeidos)}${pct}, ${num(limpiador.lineas)} líneas, ${lotes} lotes   `);
     }, 2000);
     let t = Date.now();
-    const lectura = pipeline(archivo.stream, limpiador, salida);
+    const enviarLote = async (partes) => {
+      const datos = Buffer.from(partes.join(''), 'utf8');
+      // En trozos de 64 KB: cada trozo viaja como un paquete y el límite de
+      // paquete de XAMPP (max_allowed_packet) es de 1 MB.
+      function* trozos() {
+        for (let i = 0; i < datos.length; i += 65536) yield datos.subarray(i, i + 65536);
+      }
+      await db.query({ sql: LOAD_DATA, infileStreamFactory: () => Readable.from(trozos()) });
+      lotes += 1;
+    };
     try {
-      await Promise.all([
-        lectura,
-        db.query({ sql: LOAD_DATA, infileStreamFactory: () => salida }),
-      ]);
+      let partes = [];
+      let inicioLote = 0;
+      archivo.stream.on('error', (e) => limpiador.destroy(e));
+      archivo.stream.pipe(limpiador);
+      // for await pausa la lectura mientras se envía cada lote
+      for await (const trozo of limpiador) {
+        partes.push(trozo);
+        if (limpiador.lineas - inicioLote >= LINEAS_POR_LOTE) {
+          await enviarLote(partes);
+          partes = [];
+          inicioLote = limpiador.lineas;
+        }
+      }
+      if (partes.length) await enviarLote(partes);
     } finally {
       clearInterval(avance);
     }
     process.stdout.write('\r' + ' '.repeat(80) + '\r');
-    console.log(`1. Lectura: ${num(limpiador.lineas)} líneas de datos, ${num(limpiador.descartadas)} de encabezado o vacías,`
+    console.log(`1. Lectura: ${num(limpiador.lineas)} líneas de datos en ${lotes} lotes, ${num(limpiador.descartadas)} de encabezado o vacías,`
       + ` ${num(limpiador.malformadas)} malformadas (${seg(t)})`);
     informe.push('## Lectura\n', tablaMarkdown([{
       lineas_datos: limpiador.lineas, encabezados_o_vacias: limpiador.descartadas,
