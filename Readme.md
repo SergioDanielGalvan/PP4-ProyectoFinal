@@ -64,6 +64,28 @@ del mes. Volver a cargar un mes lo reemplaza. Cada carga deja un informe en
 Referencia: 600 mil líneas (418 MB) tardan menos de un minuto; un mes real
 (5,7 GB) del orden de 15 a 25 minutos, según la PC y la red.
 
+### Configuración de MariaDB (XAMPP) para la carga
+
+La configuración de fábrica de XAMPP es para sitios chicos. La carga funciona
+igual (envía el archivo en lotes de 500.000 líneas, en paquetes de 64 KB), pero
+para un mes real conviene darle más recursos. En el servidor, con MySQL
+detenido desde el panel de XAMPP, editar `xampp\mysql\bin\my.ini`, sección
+`[mysqld]` (cambiar las líneas que ya existen):
+
+```ini
+max_allowed_packet = 64M
+innodb_buffer_pool_size = 1G      ; 512M si la PC tiene menos de 8 GB de RAM
+innodb_log_file_size = 256M
+innodb_log_buffer_size = 32M
+net_read_timeout = 600
+net_write_timeout = 600
+```
+
+Después iniciar MySQL desde el panel. Si no arranca, volver a los valores
+anteriores y revisar `xampp\mysql\data\mysql_error.log`. Si la carga corta la
+conexión (`ECONNRESET`), ese mismo log dice por qué; mientras tanto se puede
+probar con lotes más chicos (`LINEAS_POR_LOTE=100000` en `carga\.env`).
+
 ## Endpoints de la API
 
 | Método y ruta | Parámetros | Devuelve |
