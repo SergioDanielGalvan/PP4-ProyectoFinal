@@ -41,8 +41,12 @@ encabezado y línea de guiones (que pueden repetirse por página), termina en
 CRLF y cada línea se rellena con espacios hasta ~700 caracteres.
 
 **Por eso** los archivos pesan 5 a 10 GB aunque los datos útiles son mucho
-menos, y la carga descarta toda línea cuya aduana no sea de 3 dígitos en vez de
-saltear un número fijo de líneas.
+menos. La carga (`carga/cargar-mes.js`) lee el `.lst` directamente del ZIP,
+recorta cada campo en Node y descarta toda línea cuya aduana no sea de 3
+dígitos (en vez de saltear un número fijo de líneas), así a MySQL sólo llegan
+los datos. El ZIP del mes trae `impo_AAAAMM.lst`, `expo_agregado_AAAAMM.lst`
+y `total_expo_agregado_AAAAMM.lst`; por ahora sólo se procesa el de
+importación.
 
 ## 3. Tres tablas: Caratula, Item, Liq
 
@@ -55,18 +59,38 @@ y del ítem. Se separan en tres niveles para no repetirlos.
 | `Item` | NCM, origen, unidad, cantidad, FOB USD | Único por destinación e ítem (validación d: 0 variantes) |
 | `Liq` | Concepto (`Codigo` de TASAS) y monto | Varias líneas por ítem |
 
-## 4. Montos en cero y ítems que no vienen
+## 4. Montos en cero, ítems completos y procedencia
 
 - Las líneas de liquidación con monto cero **no vienen** en el archivo (por
-  ejemplo, jurisdicciones de IIBB cuyo coeficiente da cero). En los análisis,
-  un concepto ausente vale cero.
-- Si el archivo se arma como join interno ítem × liquidación, un ítem **sin
-  ningún monto mayor a cero no aparece**, con su FOB y su NCM. Afecta sobre
-  todo a mercadería exenta (por ejemplo, libros). La validación f) de la carga
-  mide cuánto FOB falta en las destinaciones en dólares.
-- **Pendiente:** confirmar con una destinación completa extraída del archivo
-  (`findstr "26073IC04083707G" IMPO.LST`), porque la muestra disponible
-  parece tener líneas salteadas.
+  ejemplo, jurisdicciones de IIBB cuyo coeficiente da cero). Un concepto
+  ausente vale cero.
+- El archivo completo **trae todos los ítems y todos los conceptos**
+  (derechos, tasa de estadística, IVA, IVA adicional, Ganancias, IIBB por
+  jurisdicción). Verificado con 26001IC04147748D de 202607: sus dos ítems
+  suman 1.301,80, igual al FOB total. Los ítems y conceptos que faltaban en
+  la primera muestra eran porque la muestra tenía líneas salteadas.
+
+### Procedencia que varía dentro de un despacho
+
+La procedencia sale del conocimiento de embarque y es única por despacho. Sin
+embargo, en el archivo de ARCA hay despachos con más de un valor en esa
+columna (al menos 50 por mes en 202607 y 202608). Verificado en el `.lst`
+original, así que no lo introduce la carga. Ejemplo, 26001IC04147748D:
+ítem 1 origen China, procedencia Hong Kong; ítem 2 origen y procedencia
+China. Los pares suelen ser un país y un centro comercial o logístico (China /
+Hong Kong, Austria / Liechtenstein, varios países europeos / Alemania).
+
+El orden de las columnas no está invertido: dentro de un despacho, la columna
+de origen varía en muchos despachos y la de procedencia en pocos (validación
+c2 de cada carga; con las columnas invertidas, un despacho de 65 ítems
+tendría 10 procedencias).
+
+**Tratamiento:** `item.PaisProcedencia` guarda el valor de cada línea tal como
+viene; `caratula.PaisProcedencia` guarda uno solo, el del ítem de mayor FOB.
+La validación c lista los despachos afectados. **Pendiente:** confirmar en el
+SIM, con un despacho propio que tenga el problema, qué dato es el que difiere;
+si la regla de la carátula tiene que ser otra, se recalcula desde `item` sin
+volver a cargar los archivos.
 
 ## 5. Tipos de datos
 
@@ -238,15 +262,60 @@ Limitación: dos empresas con los mismos 30 primeros caracteres quedan juntas.
 
 Cada mes es una partición. Recargar un mes es vaciar su partición
 (`TRUNCATE PARTITION`) sin tocar el resto, y la carga la crea sola leyendo el
-periodo del archivo. Los meses se cargan en orden cronológico.
+periodo del archivo. Los meses se pueden cargar en cualquier orden: la carga
+busca la partición donde cae el mes y la divide (lo anterior, el mes y lo
+posterior), así que agregar un mes viejo después de uno nuevo no da error.
 
-## 12. Carga en local, demo en la nube
+## 12. Carga desde Node.js; demo en la nube
 
-La carga (staging, `GROUP BY` sobre millones de líneas) se hace en MySQL
-local; a TiDB Cloud se sube sólo el resultado. Así el staging no ocupa
+La carga es un programa Node (`npm run mes`) y no un script SQL para ejecutar
+a mano: toma el ZIP tal como se baja de ARCA, no hay rutas que editar, valida
+que el periodo del nombre coincida con el de los datos, y deja un informe por
+mes. El KIT va aparte (`npm run kit`) porque cambia muy rara vez: las NCM casi
+nunca se abren o cierran (las aperturas SIM sí, pero el archivo no las trae).
+
+El procesamiento (staging, `GROUP BY` sobre millones de líneas) se hace en
+MySQL local; a TiDB Cloud se sube sólo el resultado. Así el staging no ocupa
 espacio en la nube ni consume la cuota mensual de Request Units.
 
-## 13. Datos que no van al repositorio
+## 13. Importación del KIT y usuarios
+
+- `npm run kit` lee `Kit.mdb` con `mdb-reader` (JavaScript puro): funciona
+  igual en Windows y Linux, sin Access, ODBC ni drivers de 32/64 bits.
+- Hace `INSERT ... ON DUPLICATE KEY UPDATE` y **nunca borra**: un código que
+  desaparece del KIT puede seguir usado en meses ya cargados. En `posicion`
+  se conserva `IdPosicion`, que es lo que referencia `item`.
+- La tabla `posicion` incluye los porcentajes de importación del KIT
+  (derecho y tasa de estadística extra/intrazona, AEC, IVA, IVA adicional,
+  impuestos internos): permiten explicar por qué un ítem no trae derechos
+  (origen Mercosur, exenciones) y comparar lo liquidado contra lo esperado.
+- Dos usuarios: `comex_admin` crea, carga e importa; `comex_api` sólo lee.
+  La API se conecta con el de lectura, así una falla en la API no puede
+  modificar ni borrar datos.
+
+## 14. Servidor: MariaDB 10.4 (XAMPP)
+
+El servidor del proyecto es MariaDB 10.4.32 (XAMPP), no MySQL 8. Todo se
+probó en MariaDB y en MySQL 8; las diferencias que obligaron a cambios:
+
+- **Collation `utf8mb4_unicode_ci`**: `utf8mb4_0900_ai_ci` es sólo de MySQL 8.
+- **`NroAduana` y `PosicionSIM` son VARCHAR**: MariaDB no permite columnas
+  generadas (aduana, destinación, año, capítulo) sobre un CHAR, porque el
+  resultado depende del modo SQL `PAD_CHAR_TO_FULL_LENGTH`. Cuesta 1 byte por
+  fila, sólo en `caratula` y `posicion`.
+- **`verificador_nro` devuelve `CHAR(1) CHARACTER SET ascii`**: si no, MariaDB
+  rechaza compararlo con `NroAduana` (ascii) por mezcla de collations.
+- **La carga va en lotes**: un único `LOAD DATA` con el mes entero hizo que
+  el servidor cortara la conexión a los 5 millones de líneas. Ahora se envía
+  en lotes de 500.000 líneas (cada uno se confirma solo) y cada lote en
+  paquetes de 64 KB, por debajo del `max_allowed_packet` de 1 MB que trae
+  XAMPP. Probado con la configuración de fábrica de XAMPP (16 MB de buffer
+  pool, logs de 5 MB). Los ZIP de ARCA traen 645 bytes sobrantes al final;
+  el lector los ignora.
+- **Sin `SET PERSIST`**: no existe en MariaDB. Tampoco hace falta: viene con
+  `local_infile` activado y el log binario desactivado.
+
+## 15. Datos que no van al repositorio
 
 Los `.LST`, los `.zip` de ARCA y las bases `.mdb` con datos de clientes o
 usuarios no se suben a GitHub (`.gitignore`).

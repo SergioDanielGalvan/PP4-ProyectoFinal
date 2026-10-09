@@ -1,0 +1,120 @@
+:root {
+  --papel: #f4f6f5;
+  --hoja: #ffffff;
+  --tinta: #1d2b36;
+  --tenue: #5b6b74;
+  --linea: #cbd5d1;
+  --sello: #1f5f8b;
+  --alerta: #b42318;
+  --alerta-fondo: #fdecea;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--papel);
+  color: var(--tinta);
+  font: 16px/1.5 "Public Sans", "Segoe UI", Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.barra {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .5rem 1rem;
+  padding: 1.25rem clamp(1rem, 4vw, 3rem) .75rem;
+  border-bottom: 2px solid var(--tinta);
+}
+h1 { margin: 0; font-size: 1.75rem; font-weight: 700; letter-spacing: -.01em; }
+h2 { font-size: 1.125rem; margin: 2.5rem 0 .75rem; }
+
+.periodo { display: flex; gap: .5rem; align-items: center; color: var(--tenue); }
+.periodo select { max-width: 100%; }
+
+.pestanias {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0 clamp(1rem, 4vw, 3rem);
+  border-bottom: 1px solid var(--linea);
+}
+.pestanias button {
+  border: 0;
+  background: none;
+  padding: .75rem 1rem;
+  font: inherit;
+  color: var(--tenue);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+}
+.pestanias button[aria-selected="true"] { color: var(--tinta); font-weight: 600; border-bottom-color: var(--sello); }
+
+main { padding: 1.5rem clamp(1rem, 4vw, 3rem) 4rem; max-width: 72rem; }
+
+.buscador { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; }
+.buscador label { color: var(--tenue); }
+
+input, select, button { font: inherit; }
+input, select {
+  padding: .45rem .6rem;
+  border: 1px solid var(--linea);
+  border-radius: 3px;
+  background: var(--hoja);
+  color: var(--tinta);
+}
+#nro, #ncm { font-family: "IBM Plex Mono", Consolas, monospace; text-transform: uppercase; }
+#nro { width: 13.5rem; }
+
+.buscador button {
+  padding: .45rem 1rem;
+  border: 0;
+  border-radius: 3px;
+  background: var(--sello);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+:focus-visible { outline: 3px solid var(--sello); outline-offset: 2px; }
+
+/* Número de despacho en casillas, como en el formulario del SIM */
+.nro {
+  display: inline-flex;
+  margin: 1.75rem 0 1rem;
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: clamp(1.25rem, 3vw, 2rem);
+  border: 2px solid var(--tinta);
+  background: var(--hoja);
+}
+.nro span { padding: .15em .45em; border-right: 1px solid var(--linea); }
+.nro span:last-child { border-right: 0; }
+.nro span[title] { cursor: help; }
+
+.datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: .75rem 2rem;
+  margin: 0 0 1.5rem;
+}
+.datos div { border-top: 1px solid var(--linea); padding-top: .4rem; }
+.datos dt { color: var(--tenue); font-size: .875rem; }
+.datos dd { margin: 0; font-weight: 600; }
+
+.tabla { overflow-x: auto; background: var(--hoja); border: 1px solid var(--linea); }
+table { border-collapse: collapse; width: 100%; font-size: .9375rem; }
+th, td { padding: .5rem .75rem; text-align: left; border-bottom: 1px solid var(--linea); white-space: nowrap; }
+th { font-weight: 600; color: var(--tenue); background: var(--papel); }
+td.n, th.n { text-align: right; }
+td.desc { white-space: normal; min-width: 16rem; max-width: 28rem; }
+tr.aranceles td { background: var(--papel); color: var(--tenue); font-size: .875rem; white-space: normal; }
+tr.bajo td { background: var(--alerta-fondo); }
+.proporcion { color: var(--alerta); font-weight: 700; }
+.codigo { font-family: "IBM Plex Mono", Consolas, monospace; font-size: .875rem; }
+
+a.nro-link { color: var(--sello); }
+
+.mensaje { margin: 1.5rem 0; padding: .75rem 1rem; border-left: 4px solid var(--sello); background: var(--hoja); }
+.mensaje.error { border-left-color: var(--alerta); }
+.nota { color: var(--tenue); max-width: 60ch; }

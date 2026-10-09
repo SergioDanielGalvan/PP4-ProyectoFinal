@@ -1,0 +1,16 @@
+{
+  "name": "comex-impo-api",
+  "version": "0.1.0",
+  "description": "API REST y página de consulta de las estadísticas de importación (ARCA)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "mysql2": "^3.11.0"
+  },
+  "engines": { "node": ">=18" }
+}

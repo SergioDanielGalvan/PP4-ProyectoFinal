@@ -1,0 +1,19 @@
+{
+  "name": "comex-impo-carga",
+  "version": "0.1.0",
+  "description": "Carga de datos: tablas del KIT desde Access (rara vez) y archivos mensuales de ARCA",
+  "scripts": {
+    "base": "node crear-base.js",
+    "kit": "node importar-kit.js",
+    "mes": "node cargar-mes.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "mdb-reader": "^3.2.0",
+    "mysql2": "^3.24.5",
+    "yauzl": "^3.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

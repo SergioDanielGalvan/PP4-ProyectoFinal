@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Importaciones ARCA · prueba de API</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/impo.css">
+</head>
+<body>
+  <header class="barra">
+    <h1>Importaciones</h1>
+    <label class="periodo">
+      Periodo
+      <select id="periodo"><option value="">Todos</option></select>
+    </label>
+  </header>
+
+  <nav class="pestanias" role="tablist">
+    <button role="tab" aria-selected="true"  data-panel="p-despacho">Despacho</button>
+    <button role="tab" aria-selected="false" data-panel="p-ncm">Precios por NCM</button>
+    <button role="tab" aria-selected="false" data-panel="p-importadores">Importadores</button>
+    <button role="tab" aria-selected="false" data-panel="p-triangulaciones">Triangulaciones</button>
+  </nav>
+
+  <main>
+    <section id="p-despacho" class="panel">
+      <form id="f-despacho" class="buscador">
+        <label for="nro">Número de despacho</label>
+        <input id="nro" maxlength="16" placeholder="26001IC04151676V" title="Con o sin la letra verificadora" autocomplete="off" spellcheck="false">
+        <button type="submit">Buscar despacho</button>
+      </form>
+      <div id="r-despacho"></div>
+      <h2>Últimos despachos</h2>
+      <div id="r-lista"></div>
+    </section>
+
+    <section id="p-ncm" class="panel" hidden>
+      <form id="f-ncm" class="buscador">
+        <label for="ncm">Posición NCM</label>
+        <input id="ncm" placeholder="8471.30.12" autocomplete="off">
+        <label for="umbral">Marcar valores bajo el</label>
+        <select id="umbral">
+          <option value="0.3">30 % del promedio</option>
+          <option value="0.5" selected>50 % del promedio</option>
+          <option value="0.7">70 % del promedio</option>
+        </select>
+        <button type="submit">Comparar precios</button>
+      </form>
+      <div id="r-ncm"></div>
+    </section>
+
+    <section id="p-importadores" class="panel" hidden>
+      <form id="f-importadores" class="buscador">
+        <label for="q">Nombre del importador</label>
+        <input id="q" placeholder="Al menos 3 letras" autocomplete="off">
+        <button type="submit">Buscar importador</button>
+      </form>
+      <div id="r-importadores"></div>
+    </section>
+
+    <section id="p-triangulaciones" class="panel" hidden>
+      <p class="nota">Ítems cuyo país de origen no coincide con el país de procedencia del embarque.</p>
+      <div id="r-triangulaciones"></div>
+    </section>
+  </main>
+
+  <script src="js/impo.js"></script>
+</body>
+</html>

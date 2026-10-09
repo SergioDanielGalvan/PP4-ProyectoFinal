@@ -1,120 +1,118 @@
-# comex-impo
+# PP4 - Estadísticas de importación (ARCA)
 
-API REST en Node.js + Express + MySQL para consultar las estadísticas de
-importación que publica ARCA/AFIP (información agregada de comercio exterior).
+Base MySQL con la información agregada de comercio exterior que publica ARCA
+(archivos mensuales), más una API REST en Node.js con una página de consulta.
 
-## Estructura
+Son dos proyectos en un mismo repositorio, porque comparten el modelo de datos:
 
-```
-comex-impo/
-├── package.json
-├── .env.example            copiar como .env y completar
-├── docs/DECISIONES.md      por qué el modelo es como es
-├── access/
-│   ├── CorregirEstadisticas.bas  módulo VBA que corrige Estadisticas.mdb
-│   ├── NroAduana.bas             dígito verificador del número de destinación
-│   └── posicion.csv              10.503 subpartidas con descripción, para POSICION
-├── sql/
-│   ├── 01_schema.sql         tablas del KIT, importadores, caratula, item, liq
-│   ├── 02_tablas_sim_kit.sql códigos y descripciones generados desde Kit.mdb
-│   ├── kit2sql.py            regenera el 02 desde un Kit.mdb completo
-│   ├── 03_seed_demo.sql      datos ficticios (opcional) con códigos reales
-│   └── 04_carga_mensual.sql  carga de un mes desde el .LST (MySQL local)
-├── src/
-│   ├── server.js           arranque (lee .env y levanta el puerto)
-│   ├── app.js              Express: estáticos, rutas y manejo de errores
-│   ├── config/db.js        pool de conexiones mysql2
-│   ├── middlewares/
-│   │   ├── auth.js         enganche con el login (inactivo con AUTH_ENABLED=false)
-│   │   └── errors.js       404, errores de validación y de base
-│   ├── routes/impo.routes.js
-│   ├── controllers/impo.controller.js   valida parámetros y arma la respuesta
-│   └── models/impo.model.js             consultas SQL
-└── public/
-    ├── impo.html           página de prueba
-    ├── css/impo.css
-    └── js/impo.js
-```
-
-Cada capa tiene una sola tarea: la ruta define la URL, el controlador valida
-lo que llega y el modelo es el único que escribe SQL.
+| Carpeta | Contenido |
+|---|---|
+| `carga/` | Proyecto 1: tablas del KIT desde Access (`npm run kit`, rara vez) y archivos mensuales de ARCA (`npm run mes`) |
+| `api/` | Proyecto 2: API REST (Express + MySQL) y página de prueba en `public/` |
+| `db/` | Scripts SQL compartidos: usuarios, esquema, KIT completo, datos de prueba y migraciones |
+| `access/` | Modelo de diseño provisorio (`Estadisticas.mdb`, `Kit.mdb`) y módulos VBA |
+| `docs/` | Decisiones de diseño (`DECISIONES.md`), entregas y diagramas |
 
 ## Puesta en marcha
 
+Requisitos: MariaDB 10.4 o superior (XAMPP) o MySQL 8, y Node 18 o superior.
+Comandos desde la carpeta raíz del repositorio. El cliente de XAMPP está en
+`F:\xampp\mysql\bin\mysql.exe`; en PowerShell el `<` no funciona, por eso
+los comandos que lo usan van dentro de `cmd /c "..."`.
+
 ```bash
-mysql -u root -p --default-character-set=utf8mb4 < sql/01_schema.sql
-mysql -u root -p --default-character-set=utf8mb4 < sql/02_tablas_sim_kit.sql
-mysql -u root -p --default-character-set=utf8mb4 < sql/03_seed_demo.sql   # opcional
-cp .env.example .env                          # completar usuario y clave
+# 1. Usuarios (una vez; cambiar antes las claves). Con un usuario que pueda
+#    crear usuarios, o pegando el script en phpMyAdmin (pestaña SQL) en el servidor.
+cmd /c "F:\xampp\mysql\bin\mysql.exe -h 10.0.0.16 -u sergio -p < db\00_crear_usuarios.sql"
+
+# 2. Proyecto de carga
+cd carga
 npm install
-npm run dev
+copy .env.example .env       # completar la clave de comex_admin
+
+npm run base                 # una vez: crea la base y las tablas
+npm run kit                  # una vez y cuando cambie el KIT
+npm run mes -- E:/ARCA/202609.zip            # cada mes
+npm run mes -- E:/ARCA/202609.zip --validar  # sólo valida, no toca las tablas
+cd ..
+
+# (opcional) completar lo que falte del KIT y datos de prueba
+cmd /c "F:\xampp\mysql\bin\mysql.exe -h 10.0.0.16 -u comex_admin -p --default-character-set=utf8mb4 < db\02_tablas_sim_kit.sql"
+cmd /c "F:\xampp\mysql\bin\mysql.exe -h 10.0.0.16 -u comex_admin -p --default-character-set=utf8mb4 < db\03_seed_demo.sql"
+
+# 3. API y página de prueba
+cd api
+npm install
+copy .env.example .env      # completar la clave de comex_api
+npm run dev                 # http://localhost:3000/impo.html
 ```
 
-Abrir http://localhost:3000/impo.html
+`npm run base` ejecuta `db/01_schema.sql`; si la base ya existe no la toca
+(`--recrear` la borra con sus datos y la vuelve a crear). `npm run mes`
+controla antes de empezar que estén la base y el KIT, y si falta algo indica
+qué comando ejecutar.
 
-Para cargar un mes real: poner la ruta del .LST en el `LOAD DATA` de
-`sql/04_carga_mensual.sql` y correrlo con `mysql --local-infile=1`. El periodo
-se toma del archivo y la partición del mes se crea sola. Los meses se cargan
-en orden cronológico; recargar un mes ya cargado lo reemplaza.
+`npm run kit` lee el `.mdb` directamente (no hace falta Access ni ODBC). Agrega
+códigos nuevos y actualiza descripciones, pero no borra nada. Si `POSICION`
+todavía tiene aperturas SIM (16 caracteres), la reduce a subpartidas.
 
-## Archivo de ARCA
+`npm run mes` lee `impo_AAAAMM.lst` directamente del ZIP (sin descomprimirlo a
+disco), descarta el relleno de espacios y los encabezados, lo envía a MySQL,
+ejecuta las validaciones y carga `caratula`, `item` y `liq` en la partición
+del mes. Volver a cargar un mes lo reemplaza. Cada carga deja un informe en
+`carga/informes/impo_AAAAMM.md` con el resultado de cada validación.
+Referencia: 600 mil líneas (418 MB) tardan menos de un minuto; un mes real
+(5,7 GB) del orden de 15 a 25 minutos, según la PC y la red.
 
-Listado de mainframe: empieza con salto de página, trae encabezado y guiones,
-y cada línea se rellena con espacios hasta unos 700 caracteres. Campos
-separados por `'`:
+### Configuración de MariaDB (XAMPP) para la carga
 
-`ADU'DESTINACION'NUM_ITEM'FECHA_(AAAAMM)'NOMBRE_IMPORTADOR(30)'M'UN'CANTIDAD'FOB_DOLAR(ítem, USD)'FOB_TOTAL(destinación, en la divisa DIV)'DIV'PAI(origen)'PAI(procedencia)'POS_NCM'COD'MONTO`
+La configuración de fábrica de XAMPP es para sitios chicos. La carga funciona
+igual (envía el archivo en lotes de 500.000 líneas, en paquetes de 64 KB), pero
+para un mes real conviene darle más recursos. En el servidor, con MySQL
+detenido desde el panel de XAMPP, editar `xampp\mysql\bin\my.ini`, sección
+`[mysqld]` (cambiar las líneas que ya existen):
 
-Cada línea es ítem x concepto. No trae fecha de oficialización ni posición SIM.
-El medio de transporte viene vacío en IC06 (sobre depósito). Hay ítems que no
-vienen en el archivo (números salteados); la validación f) de la carga los mide.
+```ini
+max_allowed_packet = 64M
+innodb_buffer_pool_size = 1G      ; 512M si la PC tiene menos de 8 GB de RAM
+innodb_log_file_size = 256M
+innodb_log_buffer_size = 32M
+net_read_timeout = 600
+net_write_timeout = 600
+```
 
-Para actualizar las tablas SIM cuando cambie el KIT, regenerar
-`02_tablas_sim_kit.sql` desde el `.mdb` (se usó `mdb-export` de mdbtools,
-tomando por código la fila con FechaInicio más reciente).
+Después iniciar MySQL desde el panel. Si no arranca, volver a los valores
+anteriores y revisar `xampp\mysql\data\mysql_error.log`. Si la carga corta la
+conexión (`ECONNRESET`), ese mismo log dice por qué; mientras tanto se puede
+probar con lotes más chicos (`LINEAS_POR_LOTE=100000` en `carga\.env`).
 
-## Endpoints
+## Endpoints de la API
 
 | Método y ruta | Parámetros | Devuelve |
 |---|---|---|
 | `GET /api/health` | | estado de la conexión |
 | `GET /api/impo/periodos` | | periodos cargados con cantidad de carátulas e ítems |
-| `GET /api/impo/destinaciones` | `periodo`, `importador`, `pagina`, `tamanio` | listado paginado |
-| `GET /api/impo/destinaciones/:nro` | | carátula con ítems y aranceles anidados; acepta el número sin la letra y controla el verificador |
+| `GET /api/impo/despachos` | `periodo`, `importador`, `destinacion` (IC04...), `pagina`, `tamanio` | listado paginado de despachos |
+| `GET /api/impo/despachos/:nro` | | carátula con ítems y liquidación; acepta el número sin la letra y controla el verificador |
 | `GET /api/impo/ncm/:ncm/precios` | `periodo` | valor unitario mínimo, promedio y máximo por origen y unidad |
 | `GET /api/impo/ncm/:ncm/valores-bajos` | `periodo`, `umbral` (0-1), `limite` | ítems con valor unitario bajo el umbral del promedio |
-| `GET /api/impo/importadores` | `q` (mín. 3 letras), `periodo` | destinaciones, ítems y FOB |
+| `GET /api/impo/importadores` | `q` (mín. 3 letras), `periodo` | despachos, ítems y FOB |
 | `GET /api/impo/triangulaciones` | `periodo`, `limite` | ítems con origen distinto de la procedencia |
 
 `periodo` va como AAAAMM. La NCM se acepta con o sin puntos.
 
-## Integración con la plantilla Login
-
-1. Copiar `src/config/db.js`, `routes/impo.routes.js`,
-   `controllers/impo.controller.js`, `models/impo.model.js` y
-   `middlewares/errors.js` a las carpetas equivalentes de la plantilla.
-2. Copiar `public/impo.html`, `css/impo.css` y `js/impo.js` a su carpeta pública.
-3. En el `app.js` de la plantilla, montar la ruta **antes** del middleware
-   que exige login, para que por ahora quede abierta:
-
-   ```js
-   const impoRoutes = require('./routes/impo.routes');
-   app.use('/api/impo', impoRoutes);   // abierta, sin login
-   // ... después, lo que la plantilla protege con login
-   ```
-
-4. Cuando haya que protegerla, pasarla después del middleware de login o
-   usar `requireAuth` de `middlewares/auth.js` con `AUTH_ENABLED=true`.
-
-## Demo en TiDB Cloud
-
-Crear el esquema con `01_schema.sql`, cargar `02_tablas_sim_kit.sql`, importar un dump de las tablas finales
-(sin staging) y poner `DB_SSL=true` en el `.env`.
+**Terminología:** *despacho* es la operación, identificada por `NroAduana`
+(`26001IC04151676V`); *destinación* es el código de 4 caracteres de la tabla
+`DESTINACIONES` del KIT (`IC04`), que sale de las posiciones 6 a 9 del número.
 
 ## Modelo Access
 
-`Estadisticas.mdb` es la versión de diseño del mismo modelo, con las tablas del
-KIT vinculadas desde `Kit.mdb`. Para aplicarle las correcciones: hacer una
-copia, copiar `posicion.csv` a la carpeta del `.mdb`, importar
-`access/CorregirEstadisticas.bas` (Alt+F11 > Archivo > Importar archivo) y
-ejecutar `CorregirEstadisticas`. Qué cambia y por qué: `docs/DECISIONES.md`.
+Para aplicar correcciones al modelo de diseño: copia de respaldo del `.mdb`,
+Alt+F11 > Archivo > Importar archivo > `access/CorregirEstadisticas.bas`, y
+ejecutar `CorregirEstadisticas`. `access/NroAduana.bas` agrega el cálculo del
+dígito verificador para usar en consultas.
+
+## Documentación
+
+Todas las decisiones de diseño, con el dato que las justifica, están en
+[`docs/DECISIONES.md`](docs/DECISIONES.md).
