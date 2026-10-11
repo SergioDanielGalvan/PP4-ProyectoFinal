@@ -14,8 +14,11 @@ function errorHandler(err, req, res, next) {
   if (err instanceof HttpError) {
     return res.status(err.status).json({ error: err.message });
   }
-  console.error(err);
-  res.status(500).json({ error: 'Error interno al consultar la base de datos.' });
+  console.error(`[${new Date().toLocaleString('es-AR')}] ${req.method} ${req.originalUrl}\n`, err);
+  const respuesta = { error: 'Error interno al consultar la base de datos.' };
+  // En desarrollo (npm run dev) se muestra la causa; en producción no se exponen detalles internos
+  if (process.env.NODE_ENV !== 'production') respuesta.detalle = err.sqlMessage || err.message;
+  res.status(500).json(respuesta);
 }
 
 module.exports = { HttpError, notFound, errorHandler };

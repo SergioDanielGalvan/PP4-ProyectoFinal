@@ -12,5 +12,7 @@
     "express": "^4.21.0",
     "mysql2": "^3.11.0"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }

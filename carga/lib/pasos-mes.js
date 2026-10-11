@@ -4,20 +4,46 @@
 const RUTINAS = [
   'DROP PROCEDURE IF EXISTS preparar_periodo',
   // Crea (si falta) y vacía la partición del mes en las tres tablas.
-  // a<AAAAMM> guarda lo anterior que hubiera quedado en pmax.
+  // Los meses se pueden cargar en cualquier orden: se busca la partición
+  // donde cae el mes (pmax o un rango a<AAAAMM> de meses anteriores) y se la
+  // divide en: lo anterior al mes (si hay), el mes, y lo posterior (si hay).
   `CREATE PROCEDURE preparar_periodo(IN p INT)
    BEGIN
      DECLARE i INT DEFAULT 1;
      DECLARE t VARCHAR(20);
+     DECLARE v_part VARCHAR(64);
+     DECLARE v_lim VARCHAR(64);
+     DECLARE v_ord INT;
+     DECLARE v_prev BIGINT;
+     DECLARE v_partes TEXT;
      WHILE i <= 3 DO
        SET t = ELT(i, 'caratula', 'item', 'liq');
        IF NOT EXISTS (SELECT 1 FROM information_schema.partitions
                       WHERE table_schema = DATABASE() AND table_name = t
                         AND partition_name = CONCAT('p', p)) THEN
-         SET @s = CONCAT('ALTER TABLE ', t, ' REORGANIZE PARTITION pmax INTO (',
-                         'PARTITION a', p, ' VALUES LESS THAN (', p, '), ',
-                         'PARTITION p', p, ' VALUES LESS THAN (', p + 1, '), ',
-                         'PARTITION pmax VALUES LESS THAN MAXVALUE)');
+         -- partición que hoy contiene al mes
+         SELECT partition_name, partition_description, partition_ordinal_position
+           INTO v_part, v_lim, v_ord
+         FROM information_schema.partitions
+         WHERE table_schema = DATABASE() AND table_name = t
+           AND (partition_description = 'MAXVALUE' OR CAST(partition_description AS UNSIGNED) > p)
+         ORDER BY partition_ordinal_position LIMIT 1;
+         -- límite de la partición anterior (0 si es la primera)
+         SELECT COALESCE(MAX(CAST(partition_description AS UNSIGNED)), 0) INTO v_prev
+         FROM information_schema.partitions
+         WHERE table_schema = DATABASE() AND table_name = t
+           AND partition_ordinal_position = v_ord - 1;
+         SET v_partes = '';
+         IF v_prev < p THEN
+           SET v_partes = CONCAT('PARTITION a', p, ' VALUES LESS THAN (', p, '), ');
+         END IF;
+         SET v_partes = CONCAT(v_partes, 'PARTITION p', p, ' VALUES LESS THAN (', p + 1, ')');
+         IF v_lim = 'MAXVALUE' THEN
+           SET v_partes = CONCAT(v_partes, ', PARTITION ', v_part, ' VALUES LESS THAN MAXVALUE');
+         ELSEIF CAST(v_lim AS UNSIGNED) > p + 1 THEN
+           SET v_partes = CONCAT(v_partes, ', PARTITION ', v_part, ' VALUES LESS THAN (', v_lim, ')');
+         END IF;
+         SET @s = CONCAT('ALTER TABLE ', t, ' REORGANIZE PARTITION ', v_part, ' INTO (', v_partes, ')');
          PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
        END IF;
        SET @s = CONCAT('ALTER TABLE ', t, ' TRUNCATE PARTITION p', p);
@@ -59,32 +85,43 @@ const LOAD_DATA = `
   SET Via = NULLIF(@via, '')`;
 
 const VALIDACIONES = [
-  { id: 'b', titulo: 'Carátula única por destinación', tipo: 'control', sql: `
+  { id: 'b', titulo: 'Carátula única por despacho', tipo: 'control', sql: `
     SELECT NroAduana,
            COUNT(DISTINCT Aduana, Periodo, NombreImportador, Via,
                           DivisaFOB, FobTotalDivisas, PaisProcedencia) AS variantes
     FROM stg_impo GROUP BY NroAduana HAVING variantes > 1 LIMIT 50` },
-  { id: 'b2', titulo: 'Aduana y año coinciden con el número de destinación', tipo: 'control', sql: `
+  { id: 'b2', titulo: 'Aduana y año coinciden con el NroAduana del despacho', tipo: 'control', sql: `
     SELECT SUM(Aduana <> SUBSTRING(NroAduana, 3, 3))           AS aduana_distinta,
            SUM(LEFT(NroAduana, 2) <> SUBSTRING(Periodo, 3, 2)) AS anio_distinto
     FROM stg_impo
     HAVING aduana_distinta > 0 OR anio_distinto > 0` },
-  { id: 'b3', titulo: 'Dígito verificador', tipo: 'control', sql: `
+  { id: 'b3', titulo: 'Dígito verificador del NroAduana', tipo: 'control', sql: `
     SELECT NroAduana, verificador_nro(NroAduana) AS corresponde
     FROM (SELECT DISTINCT NroAduana FROM stg_impo) d
     WHERE RIGHT(NroAduana, 1) <> verificador_nro(NroAduana) LIMIT 50` },
-  { id: 'c', titulo: 'País de procedencia único por destinación', tipo: 'control', sql: `
-    SELECT NroAduana, COUNT(DISTINCT PaisProcedencia) AS procedencias
+  { id: 'c', titulo: 'País de procedencia único por despacho', tipo: 'control', sql: `
+    SELECT NroAduana, COUNT(DISTINCT PaisProcedencia) AS procedencias,
+           GROUP_CONCAT(DISTINCT PaisProcedencia ORDER BY PaisProcedencia) AS paises_procedencia,
+           GROUP_CONCAT(DISTINCT PaisOrigen ORDER BY PaisOrigen) AS paises_origen,
+           COUNT(DISTINCT Item) AS items
     FROM stg_impo GROUP BY NroAduana HAVING procedencias > 1 LIMIT 50` },
-  { id: 'd', titulo: 'Ítem único por destinación e ítem', tipo: 'control', sql: `
+  { id: 'c2', titulo: 'En cuántos despachos varía cada columna de país (confirma el orden origen/procedencia)', tipo: 'info', sql: `
+    SELECT COUNT(*)            AS despachos,
+           SUM(n_origen > 1)   AS varia_origen,
+           SUM(n_proc > 1)     AS varia_procedencia,
+           ROUND(100 * SUM(n_proc > 1) / COUNT(*), 3) AS pct_varia_procedencia
+    FROM (SELECT NroAduana, COUNT(DISTINCT PaisOrigen) AS n_origen,
+                 COUNT(DISTINCT PaisProcedencia) AS n_proc
+          FROM stg_impo GROUP BY NroAduana) d` },
+  { id: 'd', titulo: 'Ítem único por despacho e ítem', tipo: 'control', sql: `
     SELECT NroAduana, Item,
-           COUNT(DISTINCT UnidadMedida, CantidadUnidades, FobTotalDolares, PaisOrigen, PosicionSIM) AS variantes
+           COUNT(DISTINCT UnidadMedida, CantidadUnidades, FobTotalDolares, PaisOrigen, PaisProcedencia, PosicionSIM) AS variantes
     FROM stg_impo GROUP BY NroAduana, Item HAVING variantes > 1 LIMIT 50` },
   { id: 'e', titulo: 'Concepto único por ítem', tipo: 'control', sql: `
     SELECT NroAduana, Item, Codigo, COUNT(*) AS veces
     FROM stg_impo GROUP BY NroAduana, Item, Codigo HAVING veces > 1 LIMIT 50` },
-  { id: 'f', titulo: 'FOB de los ítems contra FOB total (destinaciones en dólares)', tipo: 'info', sql: `
-    SELECT COUNT(*) AS destinaciones_usd,
+  { id: 'f', titulo: 'FOB de los ítems contra FOB total (despachos en dólares)', tipo: 'info', sql: `
+    SELECT COUNT(*) AS despachos_usd,
            SUM(n_items < max_item)             AS con_items_salteados,
            SUM(ABS(fob_total - fob_items) > 1) AS con_diferencia,
            ROUND(100 * SUM(fob_items) / SUM(fob_total), 1) AS pct_fob_detallado
@@ -97,7 +134,7 @@ const VALIDACIONES = [
                 GROUP BY NroAduana, Item) i
           GROUP BY NroAduana) d` },
   { id: 'f2', titulo: 'Tipo de cambio implícito por divisa (USD por unidad)', tipo: 'info', sql: `
-    SELECT DivisaFOB, COUNT(*) AS destinaciones,
+    SELECT DivisaFOB, COUNT(*) AS despachos,
            ROUND(SUM(fob_items) / SUM(fob_total), 4) AS usd_por_unidad
     FROM (SELECT NroAduana, MAX(DivisaFOB) AS DivisaFOB,
                  MAX(fob_total) AS fob_total, SUM(fob) AS fob_items,
@@ -109,7 +146,7 @@ const VALIDACIONES = [
                 GROUP BY NroAduana, Item) i
           GROUP BY NroAduana) d
     WHERE n_items = max_item
-    GROUP BY DivisaFOB ORDER BY destinaciones DESC` },
+    GROUP BY DivisaFOB ORDER BY despachos DESC` },
   { id: 'g', titulo: 'Conceptos liquidados en el mes', tipo: 'info', sql: `
     SELECT s.Codigo, t.Descrip, COUNT(*) AS lineas,
            SUM(CAST(s.Monto AS DECIMAL(16,2))) AS monto
@@ -161,18 +198,21 @@ const CARGA = [
            CAST(s.FobTotalDivisas AS DECIMAL(13,2))
     FROM (SELECT NroAduana,
                  MAX(NombreImportador) AS NombreImportador,
-                 MAX(PaisProcedencia)  AS PaisProcedencia,
+                 -- una sola procedencia: la del ítem de mayor FOB
+                 SUBSTRING_INDEX(GROUP_CONCAT(PaisProcedencia
+                   ORDER BY CAST(FobTotalDolares AS DECIMAL(16,2)) DESC, CAST(Item AS UNSIGNED)), ',', 1) AS PaisProcedencia,
                  MAX(Via)              AS Via,
                  MAX(DivisaFOB)        AS DivisaFOB,
                  MAX(FobTotalDivisas)  AS FobTotalDivisas
           FROM stg_impo GROUP BY NroAduana) s
     JOIN importadores i ON i.Nombre = s.NombreImportador` },
   { titulo: 'Ítems', params: 1, sql: `
-    INSERT INTO item (Periodo, IdOperacion, Item, IdPosicion, PaisOrigen, UnidadMedida, CantidadUnidades, FobTotalDolares)
-    SELECT c.Periodo, c.IdOperacion, CAST(s.Item AS UNSIGNED), n.IdPosicion, s.PaisOrigen, s.UnidadMedida,
+    INSERT INTO item (Periodo, IdOperacion, Item, IdPosicion, PaisOrigen, PaisProcedencia, UnidadMedida, CantidadUnidades, FobTotalDolares)
+    SELECT c.Periodo, c.IdOperacion, CAST(s.Item AS UNSIGNED), n.IdPosicion, s.PaisOrigen, s.PaisProcedencia, s.UnidadMedida,
            CAST(s.CantidadUnidades AS DECIMAL(15,3)), CAST(s.FobTotalDolares AS DECIMAL(13,2))
     FROM (SELECT NroAduana, Item,
                  MAX(PaisOrigen)       AS PaisOrigen,
+                 MAX(PaisProcedencia)  AS PaisProcedencia,
                  MAX(UnidadMedida)     AS UnidadMedida,
                  MAX(CantidadUnidades) AS CantidadUnidades,
                  MAX(FobTotalDolares)  AS FobTotalDolares,

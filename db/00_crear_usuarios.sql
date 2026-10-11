@@ -8,6 +8,10 @@
 --  Así, aunque alguien encuentre una falla en la API, no puede borrar
 --  ni modificar datos.  CAMBIAR LAS CLAVES antes de ejecutar.
 --
+--  CREATE sobre comex.* le permite a comex_admin crear la propia base comex.
+--  (Sin comentarios pegados a los GRANT: phpMyAdmin los une con la línea
+--  siguiente y la sentencia no se ejecuta.)
+--
 --  Cada usuario se crea dos veces: '@localhost' para conectarse desde el
 --  mismo servidor y '@10.0.0.%' para conectarse desde otras PC de la red.
 -- =====================================================================
@@ -17,7 +21,6 @@ CREATE USER IF NOT EXISTS 'comex_admin'@'10.0.0.%'  IDENTIFIED BY 'cambiar-admin
 CREATE USER IF NOT EXISTS 'comex_api'@'localhost'   IDENTIFIED BY 'cambiar-api';
 CREATE USER IF NOT EXISTS 'comex_api'@'10.0.0.%'    IDENTIFIED BY 'cambiar-api';
 
--- CREATE sobre comex.* permite crear la propia base comex
 GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX,
       CREATE ROUTINE, ALTER ROUTINE, EXECUTE
   ON comex.* TO 'comex_admin'@'localhost', 'comex_admin'@'10.0.0.%';

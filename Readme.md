@@ -9,7 +9,7 @@ Son dos proyectos en un mismo repositorio, porque comparten el modelo de datos:
 |---|---|
 | `carga/` | Proyecto 1: tablas del KIT desde Access (`npm run kit`, rara vez) y archivos mensuales de ARCA (`npm run mes`) |
 | `api/` | Proyecto 2: API REST (Express + MySQL) y página de prueba en `public/` |
-| `db/` | Scripts SQL compartidos: usuarios, esquema, KIT completo y datos de prueba |
+| `db/` | Scripts SQL compartidos: usuarios, esquema, KIT completo, datos de prueba y migraciones |
 | `access/` | Modelo de diseño provisorio (`Estadisticas.mdb`, `Kit.mdb`) y módulos VBA |
 | `docs/` | Decisiones de diseño (`DECISIONES.md`), entregas y diagramas |
 
@@ -86,20 +86,45 @@ anteriores y revisar `xampp\mysql\data\mysql_error.log`. Si la carga corta la
 conexión (`ECONNRESET`), ese mismo log dice por qué; mientras tanto se puede
 probar con lotes más chicos (`LINEAS_POR_LOTE=100000` en `carga\.env`).
 
+## Copia de consulta en TiDB Cloud
+
+La carga mensual se hace siempre en MariaDB; a TiDB Cloud (plan Starter,
+gratis) se copia el resultado para publicar la API. En `carga/.env` completar
+las variables `TIDB_*` (datos del botón *Connect* de la instancia) y, desde
+`carga/`:
+
+```bash
+npm run tidb -- --esquema                        # una vez: base y tablas (db/tidb_schema.sql)
+npm run tidb -- --fijas                          # una vez y cuando cambie el KIT
+npm run tidb -- --periodos 202607,202608,202609  # meses a publicar (con liq)
+npm run tidb -- --periodos 202610 --sin-liq      # sin liq, si falta espacio
+npm run tidb -- --periodos 202609 --reemplazar   # después de recargar el mes en MariaDB
+npm run tidb -- --verificar 202607,202608        # sólo compara cantidades
+```
+
+Si la copia se corta, se vuelve a ejecutar lo mismo y retoma. Al final compara
+la cantidad de filas de cada mes en las dos bases. La API apunta a TiDB
+cambiando `DB_HOST`, `DB_PORT=4000`, `DB_USER` (con el prefijo) y `DB_SSL=true`.
+
 ## Endpoints de la API
 
 | Método y ruta | Parámetros | Devuelve |
 |---|---|---|
 | `GET /api/health` | | estado de la conexión |
 | `GET /api/impo/periodos` | | periodos cargados con cantidad de carátulas e ítems |
-| `GET /api/impo/destinaciones` | `periodo`, `importador`, `pagina`, `tamanio` | listado paginado |
-| `GET /api/impo/destinaciones/:nro` | | carátula con ítems y liquidación; acepta el número sin la letra y controla el verificador |
+| `GET /api/impo/despachos` | `periodo`, `importador`, `destinacion` (IC04...), `pagina`, `tamanio` | listado paginado de despachos |
+| `GET /api/impo/despachos/:nro` | | carátula con ítems y liquidación; acepta el número sin la letra y controla el verificador |
+| `GET /api/impo/subpartidas` | `desde`, `hasta` (2 a 8 dígitos), `periodo`, `limite` | por subpartida NCM y unidad: despachos, ítems, cantidad, FOB, valor unitario y cantidad de orígenes |
 | `GET /api/impo/ncm/:ncm/precios` | `periodo` | valor unitario mínimo, promedio y máximo por origen y unidad |
 | `GET /api/impo/ncm/:ncm/valores-bajos` | `periodo`, `umbral` (0-1), `limite` | ítems con valor unitario bajo el umbral del promedio |
-| `GET /api/impo/importadores` | `q` (mín. 3 letras), `periodo` | destinaciones, ítems y FOB |
+| `GET /api/impo/importadores` | `q` (mín. 3 letras), `periodo` | despachos, ítems y FOB |
 | `GET /api/impo/triangulaciones` | `periodo`, `limite` | ítems con origen distinto de la procedencia |
 
 `periodo` va como AAAAMM. La NCM se acepta con o sin puntos.
+
+**Terminología:** *despacho* es la operación, identificada por `NroAduana`
+(`26001IC04151676V`); *destinación* es el código de 4 caracteres de la tabla
+`DESTINACIONES` del KIT (`IC04`), que sale de las posiciones 6 a 9 del número.
 
 ## Modelo Access
 

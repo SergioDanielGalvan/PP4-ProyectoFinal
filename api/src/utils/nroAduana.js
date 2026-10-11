@@ -1,4 +1,4 @@
-// Dígito verificador del número de destinación (traducción de
+// Dígito verificador del número de despacho (NroAduana) (traducción de
 // NroAduana_Valido, Rutinas.bas, VB6):
 //   suma de los códigos ASCII de los 15 primeros caracteres, módulo 23, + 65
 //   (letra A..W); en exportación ('MANE' en la posición 5, se calcula como
@@ -18,14 +18,14 @@ function digitoVerificador(nro15) {
 // caracteres) y la completa.
 function validarNroAduana(entrada) {
   const nro = String(entrada || '').trim().toUpperCase();
-  if (!nro) return { valido: false, motivo: 'El número de destinación no puede estar vacío.' };
+  if (!nro) return { valido: false, motivo: 'El número de despacho no puede estar vacío.' };
   if (nro.length !== 15 && nro.length !== 16) {
-    return { valido: false, motivo: 'El número de destinación tiene 16 caracteres (o 15 sin el verificador), por ejemplo 26001IC04151676V.' };
+    return { valido: false, motivo: 'El número de despacho tiene 16 caracteres (o 15 sin el verificador), por ejemplo 26001IC04151676V.' };
   }
-  if (!/^\d{2}$/.test(nro.slice(0, 2))) return { valido: false, motivo: 'Error en el año del número de destinación.' };
-  if (!/^\d{3}$/.test(nro.slice(2, 5))) return { valido: false, motivo: 'Aduana errónea en el número de destinación.' };
-  if (!/^[0-9A-Z]{4}$/.test(nro.slice(5, 9))) return { valido: false, motivo: 'Destinación errónea en el número de destinación.' };
-  if (!/^\d{6}$/.test(nro.slice(9, 15))) return { valido: false, motivo: 'Número erróneo en el número de destinación.' };
+  if (!/^\d{2}$/.test(nro.slice(0, 2))) return { valido: false, motivo: 'Error en el año del número de despacho.' };
+  if (!/^\d{3}$/.test(nro.slice(2, 5))) return { valido: false, motivo: 'Aduana errónea en el número de despacho.' };
+  if (!/^[0-9A-Z]{4}$/.test(nro.slice(5, 9))) return { valido: false, motivo: 'Destinación errónea en el número de despacho.' };
+  if (!/^\d{6}$/.test(nro.slice(9, 15))) return { valido: false, motivo: 'Número erróneo en el número de despacho.' };
 
   const dv = digitoVerificador(nro);
   if (nro.length === 15) return { valido: true, nro: nro + dv };

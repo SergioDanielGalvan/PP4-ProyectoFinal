@@ -10,6 +10,12 @@ const pool = mysql.createPool({
   connectionLimit: Number(process.env.DB_POOL || 10),
   decimalNumbers: true, // DECIMAL -> number en el JSON
   dateStrings: true,    // DATE -> 'AAAA-MM-DD' sin corrimiento de zona horaria
+  // Conexiones ociosas: mantenerlas vivas y descartarlas antes de que el servidor
+  // (TiDB Cloud, o MariaDB al reiniciarse) las corte y la API quede con una muerta.
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  maxIdle: 2,
+  idleTimeout: 60000,
   ssl: process.env.DB_SSL === 'true'
     ? { minVersion: 'TLSv1.2', rejectUnauthorized: true }
     : undefined,

@@ -9,6 +9,14 @@ function periodoOpcional(valor) {
   return Number(valor);
 }
 
+// Código de destinación del KIT: 4 caracteres (IC04, IC06, IT14...)
+function destinacionOpcional(valor) {
+  if (valor === undefined || valor === '') return null;
+  const codigo = String(valor).trim().toUpperCase();
+  if (!/^[0-9A-Z]{4}$/.test(codigo)) throw new HttpError(400, 'La destinación es un código de 4 caracteres, por ejemplo IC04.');
+  return codigo;
+}
+
 function entero(valor, porDefecto, min, max) {
   const n = Number.parseInt(valor, 10);
   if (Number.isNaN(n)) return porDefecto;
@@ -21,31 +29,57 @@ function ncmNormalizada(valor) {
   return digitos;
 }
 
+// Rango de NCM: 2 (capítulo), 4 (partida), 6 (subpartida SA) u 8 dígitos (NCM).
+// "desde" se completa con 0 y "hasta" con 9; sin "hasta", el rango es "desde".
+function rangoNcm(desde, hasta) {
+  const limpiar = (v) => String(v || '').replace(/\./g, '').trim();
+  const d = limpiar(desde);
+  const h = limpiar(hasta) || d;
+  for (const v of [d, h]) {
+    if (!/^\d{2,8}$/.test(v)) {
+      throw new HttpError(400, 'El rango va de 2 a 8 dígitos: capítulo (84), partida (8471), subpartida (8471.30) o NCM (8471.30.12).');
+    }
+  }
+  const r = { desde: d.padEnd(8, '0'), hasta: h.padEnd(8, '9') };
+  if (r.desde > r.hasta) throw new HttpError(400, '"desde" tiene que ser menor o igual que "hasta".');
+  return r;
+}
+
 // Envuelve los handlers async para que los errores lleguen a errorHandler
 const handler = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
 // ---------- endpoints ----------
+const resumenSubpartidas = handler(async (req, res) => {
+  const { desde, hasta } = rangoNcm(req.query.desde, req.query.hasta);
+  res.json(await model.resumenSubpartidas({
+    desde, hasta,
+    periodo: periodoOpcional(req.query.periodo),
+    limite: entero(req.query.limite, 300, 1, 1000),
+  }));
+});
+
 const periodos = handler(async (req, res) => {
   res.json(await model.listarPeriodos());
 });
 
-const obtenerDestinacion = handler(async (req, res) => {
+const obtenerDespacho = handler(async (req, res) => {
   // Acepta el número sin la letra y controla el dígito verificador
   const { valido, nro, motivo } = validarNroAduana(req.params.nro);
   if (!valido) throw new HttpError(400, motivo);
-  const destinacion = await model.obtenerDestinacion(nro);
-  if (!destinacion) throw new HttpError(404, `No hay datos de la destinación ${nro}.`);
-  res.json(destinacion);
+  const despacho = await model.obtenerDespacho(nro);
+  if (!despacho) throw new HttpError(404, `No hay datos del despacho ${nro}.`);
+  res.json(despacho);
 });
 
-const listarDestinaciones = handler(async (req, res) => {
+const listarDespachos = handler(async (req, res) => {
   const filtros = {
     periodo: periodoOpcional(req.query.periodo),
     importador: (req.query.importador || '').trim(),
+    destinacion: destinacionOpcional(req.query.destinacion),
     pagina: entero(req.query.pagina, 1, 1, 10000),
     tamanio: entero(req.query.tamanio, 20, 1, 100),
   };
-  res.json(await model.listarDestinaciones(filtros));
+  res.json(await model.listarDespachos(filtros));
 });
 
 const preciosPorNcm = handler(async (req, res) => {
@@ -83,8 +117,9 @@ const triangulaciones = handler(async (req, res) => {
 
 module.exports = {
   periodos,
-  obtenerDestinacion,
-  listarDestinaciones,
+  resumenSubpartidas,
+  obtenerDespacho,
+  listarDespachos,
   preciosPorNcm,
   valoresBajos,
   buscarImportadores,

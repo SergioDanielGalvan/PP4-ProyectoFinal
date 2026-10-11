@@ -148,6 +148,10 @@ CREATE TABLE item (
   Item             SMALLINT UNSIGNED NOT NULL,
   IdPosicion       SMALLINT UNSIGNED NOT NULL,
   PaisOrigen       CHAR(3) CHARACTER SET ascii,
+  -- Procedencia tal como viene en la línea del archivo. Debería ser igual en
+  -- todo el despacho; en algunos despachos ARCA trae valores distintos por
+  -- ítem. caratula.PaisProcedencia guarda una sola (ver DECISIONES).
+  PaisProcedencia  CHAR(3) CHARACTER SET ascii,
   UnidadMedida     CHAR(2) CHARACTER SET ascii,
   CantidadUnidades DECIMAL(15,3),
   FobTotalDolares           DECIMAL(13,2),

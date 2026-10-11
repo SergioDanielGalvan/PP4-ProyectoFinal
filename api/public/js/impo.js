@@ -50,7 +50,7 @@ async function cargarPeriodos() {
   try {
     const periodos = await api('/periodos');
     for (const p of periodos) {
-      const texto = `${mes(p.periodo)} (${num(p.caratulas)} destinaciones)`;
+      const texto = `${mes(p.periodo)} (${num(p.caratulas)} despachos)`;
       $('#periodo').insertAdjacentHTML('beforeend', `<option value="${p.periodo}">${texto}</option>`);
     }
   } catch (err) {
@@ -64,19 +64,19 @@ $('#periodo').addEventListener('change', () => {
   if (activo === 'p-triangulaciones') cargarTriangulaciones();
 });
 
-// ---------- destinación ----------
+// ---------- despacho ----------
 function nroEnCasillas(nro) {
   const partes = [
     [nro.slice(0, 2), 'Año'], [nro.slice(2, 5), 'Aduana'], [nro.slice(5, 9), 'Subrégimen'],
     [nro.slice(9, 15), 'Número'], [nro.slice(15), 'Verificador'],
   ];
-  return `<div class="nro" aria-label="Destinación ${nro}">${partes.map(([v, t]) => `<span title="${t}">${esc(v)}</span>`).join('')}</div>`;
+  return `<div class="nro" aria-label="Despacho ${nro}">${partes.map(([v, t]) => `<span title="${t}">${esc(v)}</span>`).join('')}</div>`;
 }
 
-async function mostrarDestinacion(nro) {
-  const destino = $('#r-destinacion');
+async function mostrarDespacho(nro) {
+  const destino = $('#r-despacho');
   try {
-    const d = await api(`/destinaciones/${encodeURIComponent(nro)}`);
+    const d = await api(`/despachos/${encodeURIComponent(nro)}`);
     // FOB por ítem viene en USD; FOB total, en la divisa de la factura
     const fobItems = d.items.reduce((s, it) => s + (it.fob_usd || 0), 0);
     const enDolares = d.divisa === 'DOL';
@@ -97,11 +97,11 @@ async function mostrarDestinacion(nro) {
       }</td></tr>`,
     ]);
     destino.innerHTML = `
-      ${nroEnCasillas(d.nro_destinacion)}
+      ${nroEnCasillas(d.nro_despacho)}
       <dl class="datos">
         <div><dt>Importador</dt><dd>${esc(d.importador)}</dd></div>
         <div><dt>Periodo</dt><dd>${esc(mes(d.periodo))}</dd></div>
-        <div><dt>Destinación</dt><dd>${esc(d.tipo_destinacion_desc || d.tipo_destinacion)}</dd></div>
+        <div><dt>Destinación</dt><dd>${esc(d.destinacion_desc || d.destinacion)}</dd></div>
         <div><dt>Aduana</dt><dd>${codigo(d.aduana, d.aduana_desc)}</dd></div>
         <div><dt>Procedencia</dt><dd>${codigo(d.pais_procedencia, d.pais_procedencia_desc)}</dd></div>
         <div><dt>Medio de transporte</dt><dd>${esc(d.medio_transporte_desc || d.medio_transporte)}</dd></div>
@@ -120,26 +120,29 @@ async function mostrarDestinacion(nro) {
   }
 }
 
-$('#f-destinacion').addEventListener('submit', (e) => {
+$('#f-despacho').addEventListener('submit', (e) => {
   e.preventDefault();
-  mostrarDestinacion($('#nro').value.trim().toUpperCase());
+  const nro = $('#nro').value.trim().toUpperCase();
+  if (!nro) return mensaje($('#r-despacho'), 'Escribí el número de despacho, por ejemplo 26001IC04151676V (la letra final es opcional).', true);
+  mostrarDespacho(nro);
 });
 
 async function cargarLista() {
   const destino = $('#r-lista');
   try {
-    const r = await api('/destinaciones', { periodo: periodo(), tamanio: 10 });
-    if (r.total === 0) return mensaje(destino, 'No hay destinaciones en este periodo. Cargá un mes con npm run mes en la carpeta carga.');
+    const r = await api('/despachos', { periodo: periodo(), tamanio: 10 });
+    if (r.total === 0) return mensaje(destino, 'No hay despachos en este periodo. Cargá un mes con npm run mes en la carpeta carga.');
     const filas = r.resultados.map((d) => `
       <tr>
-        <td><a href="#" class="nro-link codigo" data-nro="${esc(d.nro_destinacion)}">${esc(d.nro_destinacion)}</a></td>
+        <td><a href="#" class="nro-link codigo" data-nro="${esc(d.nro_despacho)}">${esc(d.nro_despacho)}</a></td>
+        <td class="codigo">${esc(d.destinacion)}</td>
         <td>${esc(mes(d.periodo))}</td>
         <td>${esc(d.importador)}</td>
         <td class="n">${d.items}</td>
         <td class="n">${esc(d.divisa === 'DOL' ? 'US$' : (d.divisa_abrev || d.divisa))} ${importe(d.fob_total_divisa)}</td>
       </tr>`);
     destino.innerHTML = tabla([
-      { titulo: 'Destinación' }, { titulo: 'Periodo' }, { titulo: 'Importador' },
+      { titulo: 'Despacho' }, { titulo: 'Destinación' }, { titulo: 'Periodo' }, { titulo: 'Importador' },
       { titulo: 'Ítems', n: true }, { titulo: 'FOB total factura', n: true },
     ], filas);
   } catch (err) {
@@ -152,8 +155,50 @@ $('#r-lista').addEventListener('click', (e) => {
   if (!link) return;
   e.preventDefault();
   $('#nro').value = link.dataset.nro;
-  mostrarDestinacion(link.dataset.nro);
-  $('#r-destinacion').scrollIntoView({ behavior: 'smooth' });
+  mostrarDespacho(link.dataset.nro);
+  $('#r-despacho').scrollIntoView({ behavior: 'smooth' });
+});
+
+// ---------- subpartidas ----------
+$('#f-subpartidas').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const destino = $('#r-subpartidas');
+  const desde = $('#desde').value.trim();
+  if (!desde) return mensaje(destino, 'Escribí al menos el comienzo del rango, por ejemplo 8471 o 84.', true);
+  try {
+    const r = await api('/subpartidas', { desde, hasta: $('#hasta').value.trim(), periodo: periodo() });
+    if (r.subpartidas.length === 0) return mensaje(destino, 'No hay importaciones en ese rango para el periodo elegido.');
+    const filas = r.subpartidas.map((s) => `
+      <tr>
+        <td><a href="#" class="ncm-link codigo" data-ncm="${esc(s.ncm)}">${esc(s.ncm)}</a></td>
+        <td class="desc" title="${esc(s.descripcion)}">${esc(corto(s.descripcion, 80))}</td>
+        <td class="n">${num(s.despachos)}</td>
+        <td class="n">${num(s.items)}</td>
+        <td class="n">${num(s.cantidad)} ${esc(s.unidad_desc || s.unidad)}</td>
+        <td class="n">${usd(s.fob_usd)}</td>
+        <td class="n">${usd(s.vu_promedio)}</td>
+        <td class="n">${num(s.paises_origen)}</td>
+      </tr>`);
+    filas.push(`<tr class="total"><td colspan="3">Total</td><td class="n">${num(r.totales.items)}</td><td></td>
+      <td class="n">${usd(r.totales.fob_usd)}</td><td colspan="2"></td></tr>`);
+    destino.innerHTML = tabla([
+      { titulo: 'NCM' }, { titulo: 'Mercadería' }, { titulo: 'Despachos', n: true }, { titulo: 'Ítems', n: true },
+      { titulo: 'Cantidad', n: true }, { titulo: 'FOB', n: true }, { titulo: 'Valor unitario', n: true },
+      { titulo: 'Orígenes', n: true },
+    ], filas) + (r.recortado ? '<p class="mensaje">Se muestran las primeras subpartidas; acotá el rango para ver el resto.</p>' : '');
+  } catch (err) {
+    mensaje(destino, err.message, true);
+  }
+});
+
+// Clic en una subpartida: abre sus precios por origen
+$('#r-subpartidas').addEventListener('click', (e) => {
+  const link = e.target.closest('[data-ncm]');
+  if (!link) return;
+  e.preventDefault();
+  $('#ncm').value = link.dataset.ncm;
+  document.querySelector('[data-panel="p-ncm"]').click();
+  $('#f-ncm').requestSubmit();
 });
 
 // ---------- precios por NCM ----------
@@ -161,6 +206,7 @@ $('#f-ncm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const destino = $('#r-ncm');
   const ncm = $('#ncm').value.trim();
+  if (!ncm) return mensaje(destino, 'Escribí la posición NCM, por ejemplo 8471.30.12 (con o sin puntos).', true);
   try {
     const [precios, bajos] = await Promise.all([
       api(`/ncm/${encodeURIComponent(ncm)}/precios`, { periodo: periodo() }),
@@ -179,7 +225,7 @@ $('#f-ncm').addEventListener('submit', async (e) => {
       </tr>`);
     const filasBajos = bajos.items.map((b) => `
       <tr class="bajo">
-        <td class="codigo">${esc(b.nro_destinacion)}</td>
+        <td class="codigo">${esc(b.nro_despacho)}</td>
         <td>${esc(b.importador)}</td>
         <td class="codigo">${esc(b.pais_origen)}</td>
         <td class="n">${num(b.cantidad)}</td>
@@ -197,7 +243,7 @@ $('#f-ncm').addEventListener('submit', async (e) => {
       ], filasOrigen)}
       <h2>Valores unitarios por debajo del ${num(bajos.umbral * 100)} % del promedio</h2>
       ${filasBajos.length ? tabla([
-        { titulo: 'Destinación' }, { titulo: 'Importador' }, { titulo: 'Origen' }, { titulo: 'Cantidad', n: true },
+        { titulo: 'Despacho' }, { titulo: 'Importador' }, { titulo: 'Origen' }, { titulo: 'Cantidad', n: true },
         { titulo: 'Declarado', n: true }, { titulo: 'Promedio NCM', n: true }, { titulo: 'Proporción', n: true },
       ], filasBajos) : '<p class="mensaje">Ningún ítem queda por debajo de ese umbral.</p>'}`;
   } catch (err) {
@@ -209,14 +255,15 @@ $('#f-ncm').addEventListener('submit', async (e) => {
 $('#f-importadores').addEventListener('submit', async (e) => {
   e.preventDefault();
   const destino = $('#r-importadores');
+  if ($('#q').value.trim().length < 3) return mensaje(destino, 'Escribí al menos 3 letras del nombre del importador.', true);
   try {
     const rows = await api('/importadores', { q: $('#q').value.trim(), periodo: periodo() });
     if (rows.length === 0) return mensaje(destino, 'Ningún importador coincide con ese nombre en el periodo elegido.');
     destino.innerHTML = tabla([
-      { titulo: 'Importador' }, { titulo: 'Destinaciones', n: true }, { titulo: 'Ítems', n: true },
+      { titulo: 'Importador' }, { titulo: 'Despachos', n: true }, { titulo: 'Ítems', n: true },
       { titulo: 'FOB', n: true },
     ], rows.map((r) => `
-      <tr><td>${esc(r.nombre)}</td><td class="n">${r.destinaciones}</td><td class="n">${r.items}</td>
+      <tr><td>${esc(r.nombre)}</td><td class="n">${r.despachos}</td><td class="n">${r.items}</td>
       <td class="n">${usd(r.fob_usd)}</td></tr>`));
   } catch (err) {
     mensaje(destino, err.message, true);

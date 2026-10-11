@@ -67,6 +67,9 @@ input, select {
 }
 #nro, #ncm { font-family: "IBM Plex Mono", Consolas, monospace; text-transform: uppercase; }
 #nro { width: 13.5rem; }
+.ncm-corto { width: 9rem; font-family: "IBM Plex Mono", Consolas, monospace; }
+tr.total td { font-weight: 700; background: var(--papel); }
+.ncm-link { color: var(--sello); }
 
 .buscador button {
   padding: .45rem 1rem;
@@ -79,7 +82,7 @@ input, select {
 }
 :focus-visible { outline: 3px solid var(--sello); outline-offset: 2px; }
 
-/* Número de destinación en casillas, como en el formulario del SIM */
+/* Número de despacho en casillas, como en el formulario del SIM */
 .nro {
   display: inline-flex;
   margin: 1.75rem 0 1rem;

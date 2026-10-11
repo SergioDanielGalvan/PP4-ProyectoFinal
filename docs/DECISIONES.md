@@ -59,18 +59,38 @@ y del ítem. Se separan en tres niveles para no repetirlos.
 | `Item` | NCM, origen, unidad, cantidad, FOB USD | Único por destinación e ítem (validación d: 0 variantes) |
 | `Liq` | Concepto (`Codigo` de TASAS) y monto | Varias líneas por ítem |
 
-## 4. Montos en cero y ítems que no vienen
+## 4. Montos en cero, ítems completos y procedencia
 
 - Las líneas de liquidación con monto cero **no vienen** en el archivo (por
-  ejemplo, jurisdicciones de IIBB cuyo coeficiente da cero). En los análisis,
-  un concepto ausente vale cero.
-- Si el archivo se arma como join interno ítem × liquidación, un ítem **sin
-  ningún monto mayor a cero no aparece**, con su FOB y su NCM. Afecta sobre
-  todo a mercadería exenta (por ejemplo, libros). La validación f) de la carga
-  mide cuánto FOB falta en las destinaciones en dólares.
-- **Pendiente:** confirmar con una destinación completa extraída del archivo
-  (`findstr "26073IC04083707G" IMPO.LST`), porque la muestra disponible
-  parece tener líneas salteadas.
+  ejemplo, jurisdicciones de IIBB cuyo coeficiente da cero). Un concepto
+  ausente vale cero.
+- El archivo completo **trae todos los ítems y todos los conceptos**
+  (derechos, tasa de estadística, IVA, IVA adicional, Ganancias, IIBB por
+  jurisdicción). Verificado con 26001IC04147748D de 202607: sus dos ítems
+  suman 1.301,80, igual al FOB total. Los ítems y conceptos que faltaban en
+  la primera muestra eran porque la muestra tenía líneas salteadas.
+
+### Procedencia que varía dentro de un despacho
+
+La procedencia sale del conocimiento de embarque y es única por despacho. Sin
+embargo, en el archivo de ARCA hay despachos con más de un valor en esa
+columna (al menos 50 por mes en 202607 y 202608). Verificado en el `.lst`
+original, así que no lo introduce la carga. Ejemplo, 26001IC04147748D:
+ítem 1 origen China, procedencia Hong Kong; ítem 2 origen y procedencia
+China. Los pares suelen ser un país y un centro comercial o logístico (China /
+Hong Kong, Austria / Liechtenstein, varios países europeos / Alemania).
+
+El orden de las columnas no está invertido: dentro de un despacho, la columna
+de origen varía en muchos despachos y la de procedencia en pocos (validación
+c2 de cada carga; con las columnas invertidas, un despacho de 65 ítems
+tendría 10 procedencias).
+
+**Tratamiento:** `item.PaisProcedencia` guarda el valor de cada línea tal como
+viene; `caratula.PaisProcedencia` guarda uno solo, el del ítem de mayor FOB.
+La validación c lista los despachos afectados. **Pendiente:** confirmar en el
+SIM, con un despacho propio que tenga el problema, qué dato es el que difiere;
+si la regla de la carátula tiene que ser otra, se recalcula desde `item` sin
+volver a cargar los archivos.
 
 ## 5. Tipos de datos
 
@@ -242,7 +262,9 @@ Limitación: dos empresas con los mismos 30 primeros caracteres quedan juntas.
 
 Cada mes es una partición. Recargar un mes es vaciar su partición
 (`TRUNCATE PARTITION`) sin tocar el resto, y la carga la crea sola leyendo el
-periodo del archivo. Los meses se cargan en orden cronológico.
+periodo del archivo. Los meses se pueden cargar en cualquier orden: la carga
+busca la partición donde cae el mes y la divide (lo anterior, el mes y lo
+posterior), así que agregar un mes viejo después de uno nuevo no da error.
 
 ## 12. Carga desde Node.js; demo en la nube
 
@@ -293,7 +315,49 @@ probó en MariaDB y en MySQL 8; las diferencias que obligaron a cambios:
 - **Sin `SET PERSIST`**: no existe en MariaDB. Tampoco hace falta: viene con
   `local_infile` activado y el log binario desactivado.
 
-## 15. Datos que no van al repositorio
+## 15. Nivel de detalle de la mercadería
+
+El archivo de ARCA trae la **NCM a 8 dígitos**: los 6 primeros son el Sistema
+Armonizado (internacional, de la OMA) y los 2 últimos, la apertura Mercosur.
+No trae la **posición SIM de 16 caracteres** (apertura nacional) ni los
+**sufijos de valor** (marca, modelo, versión, características técnicas), que
+son los que permitirían comparar productos idénticos. Por eso los análisis
+de precios son por subpartida NCM y unidad: dentro de una misma NCM conviven
+productos muy distintos y el valor unitario promedio es orientativo.
+
+El resumen por rango (`/api/impo/subpartidas`) acepta capítulo, partida,
+subpartida del SA o NCM, y agrupa por NCM y unidad de medida (no se suman
+kilos con unidades).
+
+## 16. Datos que no van al repositorio
 
 Los `.LST`, los `.zip` de ARCA y las bases `.mdb` con datos de clientes o
 usuarios no se suben a GitHub (`.gitignore`).
+
+## 17. Copia de consulta en TiDB Cloud
+
+MariaDB local es la base de trabajo: ahí se carga y valida cada mes. TiDB
+Cloud (Starter: 5 GiB y 50 M de Request Units por mes, gratis) es una copia de
+sólo consulta para la API publicada. Tres meses ocupan ~1,6 GB en MariaDB
+(`liq` es el 83 %), así que entran completos.
+
+- **Esquema propio (`db/tidb_schema.sql`)**: TiDB no tiene procedimientos ni
+  funciones almacenadas (la carga los usa), por eso no se carga ahí. Sin
+  `stg_impo`, sin `AUTO_INCREMENT` (los Id se copian de MariaDB para que las
+  relaciones queden iguales) y sin particiones (TiDB distribuye los datos por
+  su cuenta). Las claves compuestas se declaran `CLUSTERED` para que las filas
+  se guarden ordenadas por la clave sin un índice extra, y se agrega un índice
+  por `Periodo` en `caratula` e `item`, que en MariaDB resolvía la partición.
+- **Copia por bloques de IdOperacion** (`npm run tidb`): lee de MariaDB e
+  inserta en TiDB en lotes de 5.000 filas, tres a la vez. Cada bloque se
+  termina antes de empezar el siguiente; si se corta, al repetir el comando
+  retoma desde el bloque del último IdOperacion copiado (`INSERT IGNORE`).
+- **Recarga de un mes**: recargar un mes en MariaDB cambia sus IdOperacion. La
+  copia lo detecta (compara el NroAduana de un IdOperacion en ambas bases) y
+  pide `--reemplazar`, que borra el mes en TiDB de a 20.000 filas (una sola
+  transacción con millones de filas supera los límites de TiDB) y lo copia.
+- **Tablas fijas** (KIT y `posicion`) e `importadores` se copian completas
+  con `ON DUPLICATE KEY UPDATE`; no dependen del período.
+- **Conexión**: TiDB Cloud exige TLS y el usuario lleva el prefijo de la
+  instancia (`xxxx.root`). La API usa un usuario `xxxx.comex_api` con sólo
+  `SELECT`.

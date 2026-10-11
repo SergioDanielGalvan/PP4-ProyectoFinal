@@ -21,10 +21,10 @@ async function listarPeriodos() {
   return rows;
 }
 
-async function obtenerDestinacion(nro) {
+async function obtenerDespacho(nro) {
   const [caratulas] = await pool.query(`
-    SELECT c.IdOperacion AS id, c.Periodo AS periodo, c.NroAduana AS nro_destinacion,
-           c.Destinacion          AS tipo_destinacion, d.Descrip  AS tipo_destinacion_desc,
+    SELECT c.IdOperacion AS id, c.Periodo AS periodo, c.NroAduana AS nro_despacho,
+           c.Destinacion          AS destinacion, d.Descrip  AS destinacion_desc,
            c.AduanaOficializacion AS aduana,           a.Descrip  AS aduana_desc,
            imp.Nombre             AS importador,
            c.PaisProcedencia      AS pais_procedencia, pp.Descrip AS pais_procedencia_desc,
@@ -72,13 +72,18 @@ async function obtenerDestinacion(nro) {
   return { periodo, ...caratula, items: [...porItem.values()] };
 }
 
-async function listarDestinaciones({ periodo, importador, pagina, tamanio }) {
+async function listarDespachos({ periodo, importador, destinacion, pagina, tamanio }) {
   const params = [];
   let where = 'WHERE 1 = 1';
   where += filtroPeriodo('c', periodo, params);
   if (importador) {
     where += ' AND imp.Nombre LIKE ?';
     params.push(`%${importador}%`);
+  }
+  // destinación = código del KIT (IC04, IC06...), sale de NroAduana
+  if (destinacion) {
+    where += ' AND c.Destinacion = ?';
+    params.push(destinacion);
   }
 
   const [[{ total }]] = await pool.query(`
@@ -88,8 +93,8 @@ async function listarDestinaciones({ periodo, importador, pagina, tamanio }) {
     ${where}`, params);
 
   const [rows] = await pool.query(`
-    SELECT c.NroAduana AS nro_destinacion, c.Periodo AS periodo,
-           c.AduanaOficializacion AS aduana, imp.Nombre AS importador,
+    SELECT c.NroAduana AS nro_despacho, c.Periodo AS periodo,
+           c.Destinacion AS destinacion, c.AduanaOficializacion AS aduana, imp.Nombre AS importador,
            c.PaisProcedencia AS pais_procedencia, c.DivisaFOB AS divisa,
            dv.Abreviatura AS divisa_abrev, c.FobTotalDivisas AS fob_total_divisa,
            (SELECT COUNT(*) FROM item i
@@ -109,6 +114,38 @@ async function buscarNcm(ncmDigitos) {
     "SELECT IdPosicion AS id, PosicionSIM AS ncm, DescripcionNCM AS descripcion FROM posicion WHERE REPLACE(PosicionSIM, '.', '') = ? LIMIT 1",
     [ncmDigitos]);
   return rows[0] || null;
+}
+
+// Resumen por subpartida NCM dentro de un rango (capítulo, partida o subpartida).
+// desde/hasta llegan como dígitos ya completados a 8 (00000000-99999999).
+// Se agrupa también por unidad: no se suman kilos con unidades.
+async function resumenSubpartidas({ desde, hasta, periodo, limite }) {
+  const params = [desde.slice(0, 4), hasta.slice(0, 4), desde, hasta];
+  const filtro = filtroPeriodo('i', periodo, params);
+  const [rows] = await pool.query(`
+    SELECT p.PosicionSIM AS ncm, p.Partida AS partida, p.DescripcionNCM AS descripcion,
+           i.UnidadMedida AS unidad, u.Descrip AS unidad_desc,
+           COUNT(DISTINCT i.IdOperacion, i.Periodo) AS despachos,
+           COUNT(*)                                 AS items,
+           SUM(i.CantidadUnidades)                  AS cantidad,
+           SUM(i.FobTotalDolares)                   AS fob_usd,
+           ROUND(SUM(i.FobTotalDolares) / NULLIF(SUM(i.CantidadUnidades), 0), 6) AS vu_promedio,
+           COUNT(DISTINCT i.PaisOrigen)             AS paises_origen
+    FROM posicion p
+    JOIN item i ON i.IdPosicion = p.IdPosicion
+    LEFT JOIN unidadesmedida u ON u.Codigo = i.UnidadMedida
+    WHERE p.Partida BETWEEN ? AND ?
+      AND REPLACE(p.PosicionSIM, '.', '') BETWEEN ? AND ?${filtro}
+    GROUP BY p.IdPosicion, p.PosicionSIM, p.Partida, p.DescripcionNCM, i.UnidadMedida, u.Descrip
+    ORDER BY p.PosicionSIM, fob_usd DESC
+    LIMIT ?`, [...params, limite + 1]);
+
+  const recortado = rows.length > limite;
+  const subpartidas = recortado ? rows.slice(0, limite) : rows;
+  const totales = subpartidas.reduce((t, r) => ({
+    items: t.items + Number(r.items), fob_usd: t.fob_usd + Number(r.fob_usd || 0),
+  }), { items: 0, fob_usd: 0 });
+  return { desde, hasta, periodo, recortado, totales, subpartidas };
 }
 
 // Precios por país de origen y unidad: base para comparar valores declarados
@@ -151,7 +188,7 @@ async function valoresBajos(ncmDigitos, { periodo, umbral, limite }) {
       WHERE x.IdPosicion = ?${filtroRef}
       GROUP BY x.UnidadMedida
     )
-    SELECT c.NroAduana AS nro_destinacion, c.Periodo AS periodo, imp.Nombre AS importador,
+    SELECT c.NroAduana AS nro_despacho, c.Periodo AS periodo, imp.Nombre AS importador,
            i.Item AS item, i.PaisOrigen AS pais_origen, i.UnidadMedida AS unidad,
            i.CantidadUnidades AS cantidad, i.ValorUnitario AS valor_unitario,
            ROUND(r.vu_ref, 6)                   AS vu_promedio,
@@ -172,7 +209,7 @@ async function buscarImportadores(texto, periodo) {
   const params = [`%${texto}%`];
   const [rows] = await pool.query(`
     SELECT imp.Nombre AS nombre,
-           COUNT(DISTINCT c.IdOperacion) AS destinaciones,
+           COUNT(DISTINCT c.IdOperacion) AS despachos,
            COUNT(*)                     AS items,
            SUM(i.FobTotalDolares)                AS fob_usd
     FROM importadores imp
@@ -207,8 +244,9 @@ async function triangulaciones(periodo, limite) {
 
 module.exports = {
   listarPeriodos,
-  obtenerDestinacion,
-  listarDestinaciones,
+  resumenSubpartidas,
+  obtenerDespacho,
+  listarDespachos,
   preciosPorNcm,
   valoresBajos,
   buscarImportadores,

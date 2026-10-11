@@ -11,6 +11,9 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// La raíz lleva a la página de consulta
+app.get('/', (req, res) => res.redirect('/impo.html'));
+
 // Chequeo rápido de que la API y la base responden
 app.get('/api/health', async (req, res, next) => {
   try {

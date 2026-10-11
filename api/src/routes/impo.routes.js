@@ -4,8 +4,9 @@ const ctrl = require('../controllers/impo.controller');
 const router = Router();
 
 router.get('/periodos', ctrl.periodos);
-router.get('/destinaciones', ctrl.listarDestinaciones);
-router.get('/destinaciones/:nro', ctrl.obtenerDestinacion);
+router.get('/despachos', ctrl.listarDespachos);
+router.get('/despachos/:nro', ctrl.obtenerDespacho);
+router.get('/subpartidas', ctrl.resumenSubpartidas);
 router.get('/ncm/:ncm/precios', ctrl.preciosPorNcm);
 router.get('/ncm/:ncm/valores-bajos', ctrl.valoresBajos);
 router.get('/importadores', ctrl.buscarImportadores);
