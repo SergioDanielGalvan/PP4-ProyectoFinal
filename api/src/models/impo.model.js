@@ -11,13 +11,20 @@ function filtroPeriodo(alias, periodo, params) {
   return ` AND ${alias}.Periodo = ?`;
 }
 
+// Los periodos cambian sólo cuando se carga o copia un mes: se guardan en
+// memoria unos minutos para no contar 1,6 M de ítems en cada visita.
+const CACHE_PERIODOS_MS = 10 * 60 * 1000;
+let cachePeriodos = null;
+
 async function listarPeriodos() {
+  if (cachePeriodos && Date.now() - cachePeriodos.hora < CACHE_PERIODOS_MS) return cachePeriodos.filas;
   const [rows] = await pool.query(`
     SELECT c.periodo, c.caratulas, i.items
     FROM (SELECT Periodo AS periodo, COUNT(*) AS caratulas FROM caratula GROUP BY Periodo) c
     LEFT JOIN (SELECT Periodo AS periodo, COUNT(*) AS items FROM item GROUP BY Periodo) i
            USING (periodo)
     ORDER BY c.periodo DESC`);
+  cachePeriodos = { hora: Date.now(), filas: rows };
   return rows;
 }
 
@@ -86,10 +93,11 @@ async function listarDespachos({ periodo, importador, destinacion, pagina, taman
     params.push(destinacion);
   }
 
+  // El JOIN con importadores sólo hace falta para filtrar por nombre
   const [[{ total }]] = await pool.query(`
     SELECT COUNT(*) AS total
     FROM caratula c
-    JOIN importadores imp ON imp.IdImportador = c.IdImportador
+    ${importador ? 'JOIN importadores imp ON imp.IdImportador = c.IdImportador' : ''}
     ${where}`, params);
 
   const [rows] = await pool.query(`
@@ -103,7 +111,7 @@ async function listarDespachos({ periodo, importador, destinacion, pagina, taman
     JOIN      importadores imp ON imp.IdImportador = c.IdImportador
     LEFT JOIN divisas      dv  ON dv.Codigo = c.DivisaFOB
     ${where}
-    ORDER BY c.Periodo DESC, c.NroAduana
+    ORDER BY c.Periodo DESC, c.IdOperacion DESC   -- últimos cargados; sigue la clave, sin ordenar todo
     LIMIT ? OFFSET ?`, [...params, tamanio, (pagina - 1) * tamanio]);
 
   return { total, pagina, tamanio, resultados: rows };

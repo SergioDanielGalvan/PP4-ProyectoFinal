@@ -3,6 +3,8 @@ node_modules/
 
 # Configuración con claves
 .env
+.env.*
+!.env.example
 
 # Archivos de ARCA (pesan gigas; GitHub rechaza archivos de más de 100 MB)
 *.LST

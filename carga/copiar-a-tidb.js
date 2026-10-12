@@ -64,7 +64,7 @@ function opcionesTidb(conBase = true) {
 }
 
 const n = (x) => Number(x).toLocaleString('es-AR');
-const reloj = () => new Date().toLocaleTimeString('es-AR');
+const reloj = () => new Date().toLocaleTimeString('es-AR', { hour12: false });
 
 // Columnas reales (no generadas) de una tabla, en el orden del origen.
 async function columnasBase(origen, tabla) {

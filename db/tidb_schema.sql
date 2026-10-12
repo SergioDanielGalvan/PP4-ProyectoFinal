@@ -113,6 +113,8 @@ CREATE TABLE IF NOT EXISTS item (
   UnidadMedida     CHAR(2) CHARACTER SET ascii,
   CantidadUnidades DECIMAL(15,3),
   FobTotalDolares  DECIMAL(13,2),
+  -- TiDB no acepta ROUND/NULLIF en columnas generadas: DECIMAL(18,6) ya redondea
+  -- y la división por cero da NULL al consultar (la columna es virtual, no se guarda).
   ValorUnitario    DECIMAL(18,6) AS (FobTotalDolares / CantidadUnidades) VIRTUAL,
   PRIMARY KEY (IdOperacion, Item, Periodo) CLUSTERED,
   KEY ix_periodo (Periodo),
