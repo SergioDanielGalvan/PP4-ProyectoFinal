@@ -121,3 +121,28 @@ a.nro-link { color: var(--sello); }
 .mensaje { margin: 1.5rem 0; padding: .75rem 1rem; border-left: 4px solid var(--sello); background: var(--hoja); }
 .mensaje.error { border-left-color: var(--alerta); }
 .nota { color: var(--tenue); max-width: 60ch; }
+
+/* ---------- matriz ---------- */
+.controles { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; }
+.miga { font-size: 1.125rem; font-weight: 600; }
+.miga a { color: var(--sello); }
+.miga .sep { color: var(--tenue); margin: 0 .4rem; font-weight: 400; }
+.vista { display: inline-flex; border: 1px solid var(--linea); border-radius: 3px; overflow: hidden; }
+.vista button { border: 0; background: var(--hoja); padding: .35rem .8rem; cursor: pointer; color: var(--tenue); }
+.vista button[aria-pressed="true"] { background: var(--sello); color: #fff; font-weight: 600; }
+.grupos { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; border: 0; padding: 0; margin: 1rem 0; }
+.grupos legend { color: var(--tenue); font-size: .875rem; padding: 0; margin-bottom: .25rem; }
+.grupos label { display: inline-flex; gap: .35rem; align-items: center; font-size: .9375rem; cursor: pointer; }
+.grafico { position: relative; height: clamp(18rem, 45vh, 26rem); background: var(--hoja); border: 1px solid var(--linea); padding: .75rem; }
+.muestra { display: inline-block; width: .75rem; height: .75rem; border-radius: 2px; margin-right: .4rem; vertical-align: -1px; }
+tr.clic { cursor: pointer; }
+tr.clic:hover td { background: var(--papel); }
+
+/* ---------- sesión ---------- */
+.sesion { margin-left: auto; color: var(--tenue); font-size: .9375rem; }
+.sesion button { border: 0; background: none; color: var(--sello); text-decoration: underline; cursor: pointer; font: inherit; }
+#login { border: 1px solid var(--linea); border-radius: 4px; padding: 1.5rem; width: min(22rem, 90vw); }
+#login::backdrop { background: rgb(29 43 54 / .45); }
+#login h2 { margin: 0 0 1rem; }
+#login label { display: grid; gap: .25rem; margin-bottom: .75rem; color: var(--tenue); }
+#login button[type="submit"] { width: 100%; padding: .55rem; border: 0; border-radius: 3px; background: var(--sello); color: #fff; font-weight: 600; cursor: pointer; }

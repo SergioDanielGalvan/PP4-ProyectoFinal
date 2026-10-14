@@ -12,6 +12,7 @@
 <body>
   <header class="barra">
     <h1>Importaciones</h1>
+    <span class="sesion" id="sesion" hidden></span>
     <label class="periodo">
       Periodo
       <select id="periodo"><option value="">Todos</option></select>
@@ -24,6 +25,7 @@
     <button role="tab" aria-selected="false" data-panel="p-ncm">Precios por NCM</button>
     <button role="tab" aria-selected="false" data-panel="p-importadores">Importadores</button>
     <button role="tab" aria-selected="false" data-panel="p-triangulaciones">Triangulaciones</button>
+    <button role="tab" aria-selected="false" data-panel="p-matriz">Matriz</button>
   </nav>
 
   <main>
@@ -78,8 +80,33 @@
       <p class="nota">Ítems cuyo país de origen no coincide con el país de procedencia del embarque.</p>
       <div id="r-triangulaciones"></div>
     </section>
+
+    <section id="p-matriz" class="panel" hidden>
+      <div class="controles">
+        <nav class="miga" id="m-miga" aria-label="Nivel"></nav>
+        <div class="vista" role="group" aria-label="Unidad">
+          <button type="button" data-vista="usd" aria-pressed="true">US$</button>
+          <button type="button" data-vista="pct" aria-pressed="false">% del mes</button>
+        </div>
+      </div>
+      <fieldset class="grupos" id="m-grupos"><legend>Operaciones incluidas</legend></fieldset>
+      <div class="grafico"><canvas id="m-grafico" aria-label="Importaciones por sección y mes" role="img"></canvas></div>
+      <p class="nota" id="m-nota"></p>
+      <div id="r-matriz"></div>
+    </section>
   </main>
 
+  <dialog id="login">
+    <form id="f-login">
+      <h2>Iniciar sesión</h2>
+      <label>Usuario <input id="l-usuario" autocomplete="username" required></label>
+      <label>Clave <input id="l-clave" type="password" autocomplete="current-password" required></label>
+      <p class="mensaje error" id="l-error" hidden></p>
+      <button type="submit">Ingresar</button>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="js/impo.js"></script>
 </body>
 </html>

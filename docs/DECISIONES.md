@@ -361,3 +361,74 @@ sólo consulta para la API publicada. Tres meses ocupan ~1,6 GB en MariaDB
 - **Conexión**: TiDB Cloud exige TLS y el usuario lleva el prefijo de la
   instancia (`xxxx.root`). La API usa un usuario `xxxx.comex_api` con sólo
   `SELECT`.
+
+## 18. Matriz de importaciones: secciones, capítulos y grupos de destinación
+
+**Agrupación.** Sección (21) → capítulo (96) de la NCM, la que usa INDEC en
+sus publicaciones de comercio exterior. Sale de `posicion.Capitulo` sin
+correspondencias externas, y permite validar la carga contra INDEC. Se evaluó
+también la de usos económicos (bienes de capital, intermedios, consumo...):
+separa mejor dentro de un capítulo, pero necesita la tabla de correspondencia
+NCM de INDEC; queda para más adelante.
+
+**Validación (jul-sep 2026 contra INDEC ene-ago 2026).** Con todas las
+destinaciones, la sección V daba 24 % (INDEC 6 %) y el total superaba al de
+INDEC aun siendo FOB contra CIF. La causa:
+
+- **IC01, importación sin documento de transporte** (US$ 3.821 M): energía
+  eléctrica de CAMMESA (2716.00.00), con despachos idénticos repetidos y
+  cantidades fuera de escala; probablemente despachos por estimación.
+- **ECA1/ECA2, egreso desde Tierra del Fuego** (US$ 1.078 M): producción del
+  Área Aduanera Especial que pasa al continente; probablemente INDEC no la
+  cuenta como importación.
+
+Sin esas dos, la composición coincide con INDEC dentro de uno o dos puntos,
+salvo la sección II (1,9 % contra 7,3 %): el archivo de ARCA trae sólo
+importación **a consumo** y INDEC suma la temporaria (soja para procesar) y
+courier.
+
+**Grupos de destinación.** `grupo_destinacion` guarda sólo las excepciones;
+toda destinación que no figura es CONSUMO. Por defecto el gráfico incluye
+CONSUMO, TEMP (nacionalización de temporarias) y ZF (egreso de zona franca),
+y deja afuera REDES y AAE, que se pueden sumar con una casilla. Pendiente de
+confirmar con la despachante el tratamiento de AAE y ZF.
+
+**Cálculo.** Una sola consulta agrupada por periodo, grupo y capítulo (unas
+mil filas) que la API guarda en memoria 10 minutos; secciones, filtros y
+porcentajes se arman sobre ese resultado. En el gráfico, las 7 categorías más
+grandes tienen color propio (paleta categórica en orden fijo, que conservan al
+cambiar los filtros) y el resto se agrupa en gris; la tabla de abajo muestra
+todas.
+
+## 19. Usuarios con JWT y consultas SQL
+
+**Autenticación.** Login propio con JWT (HS256, 8 h) en lugar de sesiones:
+la API es para que la consuma otro front (y más adelante páginas de terceros),
+y un token en el encabezado funciona igual desde cualquier origen sin cookies.
+Claves con bcrypt (`bcryptjs`, JavaScript puro: instala igual en Windows y en
+Render). Dos roles: `consulta` y `admin`. El token sólo dice quién es; si el
+usuario sigue activo y qué rol tiene se lee de la base (con un minuto de
+caché), así desactivar un usuario corta su acceso sin esperar a que venza el token.
+
+**Dónde viven los usuarios.** Tabla `usuarios` en la misma base. `comex_api`
+sigue sin poder modificar los datos de comercio exterior; sobre `usuarios`
+tiene SELECT, INSERT y UPDATE (sin DELETE: los usuarios se desactivan). En
+TiDB la tabla la escribe la API directamente; no se copia desde MariaDB.
+
+**Protección por ruta.** `AUTH_ENABLED` sólo abre o cierra las consultas de
+datos (para que la página de prueba siga funcionando mientras el front no
+tenga login). Administración de usuarios y SQL libre exigen token de admin
+siempre. Freno a la fuerza bruta: 5 intentos fallidos por usuario e IP en 15
+minutos.
+
+**Consultas SQL.** Dos niveles:
+
+- *Guardadas*: archivos `.sql` en `api/src/consultas` con título, descripción
+  y parámetros con nombre. Las usa cualquier usuario; el front las lista y
+  arma la tabla sin saber SQL. Agregar una es agregar un archivo.
+- *SQL libre*: sólo admin. La defensa principal es el usuario de la base, que
+  no puede escribir; además se acepta una sola sentencia de lectura, se
+  bloquean `INTO OUTFILE`, `SLEEP`, bloqueos y la tabla `usuarios`, hay tope
+  de tiempo (`max_execution_time` en TiDB/MySQL, `max_statement_time` en
+  MariaDB) y de filas (se leen de a una y se corta al llegar al tope, sin
+  cargar millones de filas en memoria). Cada ejecución queda en el log.

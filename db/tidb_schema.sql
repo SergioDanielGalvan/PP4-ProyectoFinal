@@ -129,3 +129,41 @@ CREATE TABLE IF NOT EXISTS liq (
   Monto       DECIMAL(11,2),
   PRIMARY KEY (IdOperacion, Item, Codigo, Periodo) CLUSTERED
 );
+
+-- Matriz (db/06_matriz.sql): los datos llegan con --fijas
+CREATE TABLE IF NOT EXISTS seccion (
+  Codigo   VARCHAR(5) CHARACTER SET ascii PRIMARY KEY,
+  Numero   TINYINT UNSIGNED NOT NULL,
+  Descrip  VARCHAR(60) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS capitulo (
+  Codigo   CHAR(2) CHARACTER SET ascii PRIMARY KEY,
+  Seccion  VARCHAR(5) CHARACTER SET ascii NOT NULL,
+  Descrip  VARCHAR(80) NOT NULL,
+  KEY ix_seccion (Seccion)
+);
+
+CREATE TABLE IF NOT EXISTS grupo (
+  Codigo     VARCHAR(10) CHARACTER SET ascii PRIMARY KEY,
+  Descrip    VARCHAR(60) NOT NULL,
+  PorDefecto TINYINT(1) NOT NULL DEFAULT 1,
+  Orden      TINYINT UNSIGNED NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS grupo_destinacion (
+  Destinacion CHAR(4) CHARACTER SET ascii PRIMARY KEY,
+  Grupo       VARCHAR(10) CHARACTER SET ascii NOT NULL
+);
+
+-- Usuarios de la API (los escribe la API, no se copian de MariaDB)
+CREATE TABLE IF NOT EXISTS usuarios (
+  IdUsuario     INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  Usuario       VARCHAR(40) CHARACTER SET ascii NOT NULL UNIQUE,
+  Nombre        VARCHAR(80) NOT NULL,
+  ClaveHash     VARCHAR(100) CHARACTER SET ascii NOT NULL,
+  Rol           VARCHAR(10) CHARACTER SET ascii NOT NULL DEFAULT 'consulta',
+  Activo        TINYINT(1) NOT NULL DEFAULT 1,
+  CreadoEn      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UltimoIngreso DATETIME NULL
+);

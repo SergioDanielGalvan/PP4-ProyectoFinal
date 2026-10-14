@@ -86,6 +86,20 @@ anteriores y revisar `xampp\mysql\data\mysql_error.log`. Si la carga corta la
 conexión (`ECONNRESET`), ese mismo log dice por qué; mientras tanto se puede
 probar con lotes más chicos (`LINEAS_POR_LOTE=100000` en `carga\.env`).
 
+## Matriz de importaciones
+
+La pestaña **Matriz** muestra la composición por **sección y capítulo de la
+NCM**, la misma agrupación con la que INDEC publica el comercio exterior.
+Necesita las tablas de `db/06_matriz.sql` (secciones, capítulos y grupos de
+destinación); en una base existente se crean con:
+
+```bash
+cd carga
+npm run base      # no borra nada: sólo crea o actualiza las tablas de la matriz
+```
+
+Y para TiDB: `node copiar-a-tidb.js --esquema` y `node copiar-a-tidb.js --fijas`.
+
 ## Copia de consulta en TiDB Cloud
 
 La carga mensual se hace siempre en MariaDB; a TiDB Cloud (plan Starter,
@@ -106,12 +120,33 @@ Si la copia se corta, se vuelve a ejecutar lo mismo y retoma. Al final compara
 la cantidad de filas de cada mes en las dos bases. La API apunta a TiDB
 cambiando `DB_HOST`, `DB_PORT=4000`, `DB_USER` (con el prefijo) y `DB_SSL=true`.
 
+## Usuarios y login (JWT)
+
+La guía completa para el front está en [`docs/API.md`](docs/API.md).
+
+1. **MariaDB:** pegar `db/07_usuarios.sql` en la pestaña SQL de phpMyAdmin
+   (como root): crea la tabla `usuarios` y le da a `comex_api` permiso de
+   escritura sólo sobre ella.
+2. **TiDB:** `node copiar-a-tidb.js --esquema` (desde `carga/`) crea la tabla;
+   el permiso, en el SQL Editor de TiDB Cloud:
+   `GRANT SELECT, INSERT, UPDATE ON comex.usuarios TO 'prefijo.comex_api';`
+3. **JWT_SECRET** en `api/.env` y en las variables de Render. Generarla con
+   `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"`.
+4. **Primer administrador**, desde `api/` (usa la base de `api/.env`; la
+   clave se pide por teclado):
+   `node scripts/crear-usuario.js --usuario sergio --nombre "Sergio" --rol admin`.
+   Los demás usuarios se crean desde la API (`POST /api/auth/usuarios`).
+
+`AUTH_ENABLED=false` deja abiertas las consultas de datos (modo prueba); la
+administración de usuarios y el SQL libre piden token de admin siempre.
+
 ## Endpoints de la API
 
 | Método y ruta | Parámetros | Devuelve |
 |---|---|---|
 | `GET /api/health` | | estado de la conexión |
 | `GET /api/impo/periodos` | | periodos cargados con cantidad de carátulas e ítems |
+| `GET /api/impo/matriz` | `nivel` (`seccion` o `capitulo`), `seccion` (I…XXI, para capítulos), `grupos` (CONSUMO,TEMP,ZF,REDES,AAE) | FOB por sección o capítulo de la NCM y por mes, con los totales de cada grupo de operaciones |
 | `GET /api/impo/despachos` | `periodo`, `importador`, `destinacion` (IC04...), `pagina`, `tamanio` | listado paginado de despachos |
 | `GET /api/impo/despachos/:nro` | | carátula con ítems y liquidación; acepta el número sin la letra y controla el verificador |
 | `GET /api/impo/subpartidas` | `desde`, `hasta` (2 a 8 dígitos), `periodo`, `limite` | por subpartida NCM y unidad: despachos, ítems, cantidad, FOB, valor unitario y cantidad de orígenes |
@@ -119,6 +154,10 @@ cambiando `DB_HOST`, `DB_PORT=4000`, `DB_USER` (con el prefijo) y `DB_SSL=true`.
 | `GET /api/impo/ncm/:ncm/valores-bajos` | `periodo`, `umbral` (0-1), `limite` | ítems con valor unitario bajo el umbral del promedio |
 | `GET /api/impo/importadores` | `q` (mín. 3 letras), `periodo` | despachos, ítems y FOB |
 | `GET /api/impo/triangulaciones` | `periodo`, `limite` | ítems con origen distinto de la procedencia |
+| `POST /api/auth/login` | `usuario`, `clave` | token JWT (ver `docs/API.md` para el resto de `/api/auth`) |
+| `GET /api/consultas` | | catálogo de consultas SQL guardadas |
+| `GET /api/consultas/:nombre` | los de cada consulta | `{ columnas, filas, recortado }` |
+| `POST /api/consultas/sql` | `sql`, `limite` (sólo admin) | `{ columnas, filas, recortado }` |
 
 `periodo` va como AAAAMM. La NCM se acepta con o sin puntos.
 

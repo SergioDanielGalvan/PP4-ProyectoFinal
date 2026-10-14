@@ -250,7 +250,88 @@ async function triangulaciones(periodo, limite) {
   return rows;
 }
 
+// ---------- matriz de importaciones ----------
+// Una sola consulta pesada (ítems x carátula) agrupada por periodo, grupo de
+// destinación y capítulo: unas 1.000 filas. Todo lo demás (secciones,
+// filtros de grupo, participaciones) se arma en memoria. Se guarda unos
+// minutos porque sólo cambia al cargar o copiar un mes.
+const CACHE_MATRIZ_MS = 10 * 60 * 1000;
+let cacheMatriz = null;
+
+async function baseMatriz() {
+  if (cacheMatriz && Date.now() - cacheMatriz.hora < CACHE_MATRIZ_MS) return cacheMatriz;
+  const [filas] = await pool.query(`
+    SELECT i.Periodo AS periodo, COALESCE(g.Grupo, 'CONSUMO') AS grupo, p.Capitulo AS capitulo,
+           SUM(i.FobTotalDolares) AS fob_usd, COUNT(*) AS items
+    FROM item i
+    JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
+    JOIN posicion p ON p.IdPosicion = i.IdPosicion
+    LEFT JOIN grupo_destinacion g ON g.Destinacion = c.Destinacion
+    GROUP BY i.Periodo, COALESCE(g.Grupo, 'CONSUMO'), p.Capitulo`);
+  const [secciones] = await pool.query('SELECT Codigo AS codigo, Descrip AS descrip FROM seccion ORDER BY Numero');
+  const [capitulos] = await pool.query('SELECT Codigo AS codigo, Seccion AS seccion, Descrip AS descrip FROM capitulo ORDER BY Codigo');
+  const [grupos] = await pool.query(
+    'SELECT Codigo AS codigo, Descrip AS descrip, PorDefecto AS por_defecto FROM grupo ORDER BY Orden');
+  cacheMatriz = { hora: Date.now(), filas, secciones, capitulos, grupos };
+  return cacheMatriz;
+}
+
+// nivel 'seccion': las 21 secciones; nivel 'capitulo': los capítulos de una sección.
+// grupos: códigos de grupo a incluir (null = los que tienen PorDefecto).
+async function matriz({ nivel, seccion, grupos }) {
+  const base = await baseMatriz();
+  const capituloDe = new Map(base.capitulos.map((c) => [c.codigo, c]));
+  const incluidos = new Set(grupos || base.grupos.filter((g) => g.por_defecto).map((g) => g.codigo));
+
+  let categorias;
+  let claveDe;
+  if (nivel === 'capitulo') {
+    categorias = base.capitulos.filter((c) => c.seccion === seccion);
+    claveDe = (cap) => (capituloDe.get(cap)?.seccion === seccion ? cap : null);
+  } else {
+    categorias = base.secciones.concat([{ codigo: 'S/S', descrip: 'Sin sección (capítulo no clasificado)' }]);
+    claveDe = (cap) => capituloDe.get(cap)?.seccion || 'S/S';
+  }
+
+  const periodos = [...new Set(base.filas.map((f) => f.periodo))].sort();
+  const valores = new Map();           // "periodo|codigo" -> fob
+  const totalesGrupo = new Map();      // "periodo|grupo"  -> fob (todos los grupos, para el aviso)
+  for (const f of base.filas) {
+    const fob = Number(f.fob_usd);
+    totalesGrupo.set(`${f.periodo}|${f.grupo}`, (totalesGrupo.get(`${f.periodo}|${f.grupo}`) || 0) + fob);
+    if (!incluidos.has(f.grupo)) continue;
+    const clave = claveDe(f.capitulo);
+    if (!clave) continue;
+    valores.set(`${f.periodo}|${clave}`, (valores.get(`${f.periodo}|${clave}`) || 0) + fob);
+  }
+
+  const redondo = (v) => Math.round(v * 100) / 100;
+  const totales = Object.fromEntries(periodos.map((p) => [p,
+    redondo(categorias.reduce((a, c) => a + (valores.get(`${p}|${c.codigo}`) || 0), 0))]));
+  const filas = categorias.map((c) => {
+    const por_periodo = Object.fromEntries(periodos.map((p) => [p, redondo(valores.get(`${p}|${c.codigo}`) || 0)]));
+    const total = Object.values(por_periodo).reduce((a, v) => a + v, 0);
+    return { codigo: c.codigo, descrip: c.descrip, por_periodo, total: redondo(total) };
+  }).filter((f) => f.total > 0 || nivel === 'capitulo');
+
+  return {
+    nivel,
+    seccion: nivel === 'capitulo' ? base.secciones.find((x) => x.codigo === seccion) || null : null,
+    periodos,
+    totales,
+    categorias: filas,
+    grupos: base.grupos.map((g) => ({
+      codigo: g.codigo,
+      descrip: g.descrip,
+      incluido: incluidos.has(g.codigo),
+      por_periodo: Object.fromEntries(periodos.map((p) => [p, redondo(totalesGrupo.get(`${p}|${g.codigo}`) || 0)])),
+    })),
+    secciones: base.secciones,
+  };
+}
+
 module.exports = {
+  matriz,
   listarPeriodos,
   resumenSubpartidas,
   obtenerDespacho,

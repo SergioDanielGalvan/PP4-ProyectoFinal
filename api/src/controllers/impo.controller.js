@@ -49,6 +49,23 @@ function rangoNcm(desde, hasta) {
 const handler = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
 // ---------- endpoints ----------
+// /matriz?nivel=seccion|capitulo&seccion=XVI&grupos=CONSUMO,TEMP,ZF
+const matriz = handler(async (req, res) => {
+  const nivel = req.query.nivel || 'seccion';
+  if (!['seccion', 'capitulo'].includes(nivel)) throw new HttpError(400, 'nivel va "seccion" o "capitulo".');
+  let seccion = null;
+  if (nivel === 'capitulo') {
+    seccion = String(req.query.seccion || '').trim().toUpperCase();
+    if (!/^[IVX]{1,5}$/.test(seccion)) throw new HttpError(400, 'Para ver capítulos indicá la sección en números romanos, por ejemplo seccion=XVI.');
+  }
+  let grupos = null;
+  if (req.query.grupos !== undefined) {
+    grupos = String(req.query.grupos).split(',').map((g) => g.trim().toUpperCase()).filter(Boolean);
+    if (grupos.some((g) => !/^[A-Z]{2,10}$/.test(g))) throw new HttpError(400, 'grupos es una lista de códigos separados por coma, por ejemplo CONSUMO,TEMP.');
+  }
+  res.json(await model.matriz({ nivel, seccion, grupos }));
+});
+
 const resumenSubpartidas = handler(async (req, res) => {
   const { desde, hasta } = rangoNcm(req.query.desde, req.query.hasta);
   res.json(await model.resumenSubpartidas({
@@ -116,6 +133,7 @@ const triangulaciones = handler(async (req, res) => {
 });
 
 module.exports = {
+  matriz,
   periodos,
   resumenSubpartidas,
   obtenerDespacho,

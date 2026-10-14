@@ -16,7 +16,8 @@ const path = require('path');
 const mysql = require('mysql2/promise');
 const { conectar } = require('./lib/conexion');
 
-const FIJAS = ['aduanas', 'paises', 'via', 'unidadesmedida', 'tasas', 'divisas', 'destinaciones', 'posicion'];
+const FIJAS = ['aduanas', 'paises', 'via', 'unidadesmedida', 'tasas', 'divisas', 'destinaciones', 'posicion',
+  'seccion', 'capitulo', 'grupo', 'grupo_destinacion'];
 const FILAS_POR_INSERT = Number(process.env.TIDB_FILAS_POR_INSERT || 5000);
 const PARALELO = Number(process.env.TIDB_PARALELO || 3);
 // Bloques de IdOperacion: cada bloque se copia completo antes de pasar al siguiente,

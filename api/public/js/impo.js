@@ -14,12 +14,77 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => (
 
 const codigo = (cod, desc) => (desc ? `${esc(desc)} <span class="codigo">${esc(cod)}</span>` : `<span class="codigo">${esc(cod)}</span>`);
 
-async function api(ruta, params = {}) {
+// ---------- sesión (JWT) ----------
+// El token se guarda en localStorage y va en cada pedido. Si la API responde 401
+// (AUTH_ENABLED=true o token vencido) se pide usuario y clave y se repite el pedido.
+const CLAVE_TOKEN = 'comex_token';
+const leerToken = () => { try { return localStorage.getItem(CLAVE_TOKEN); } catch { return null; } };
+const guardarToken = (t) => { try { t ? localStorage.setItem(CLAVE_TOKEN, t) : localStorage.removeItem(CLAVE_TOKEN); } catch { /* sin storage */ } };
+let tokenEnMemoria = leerToken();
+let loginPendiente = null;
+
+function mostrarSesion(usuario) {
+  const s = $('#sesion');
+  if (!usuario) { s.hidden = true; s.innerHTML = ''; return; }
+  s.hidden = false;
+  s.innerHTML = `${esc(usuario.nombre || usuario.usuario)} · <button type="button" id="salir">Salir</button>`;
+}
+
+function pedirLogin() {
+  if (loginPendiente) return loginPendiente;
+  loginPendiente = new Promise((resolve) => {
+    const dialogo = $('#login');
+    $('#l-error').hidden = true;
+    dialogo.showModal();
+    $('#f-login').onsubmit = async (e) => {
+      e.preventDefault();
+      const resp = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario: $('#l-usuario').value, clave: $('#l-clave').value }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) { $('#l-error').textContent = data.error; $('#l-error').hidden = false; return; }
+      tokenEnMemoria = data.token;
+      guardarToken(data.token);
+      mostrarSesion(data.usuario);
+      $('#l-clave').value = '';
+      dialogo.close();
+      loginPendiente = null;
+      resolve();
+    };
+  });
+  return loginPendiente;
+}
+
+$('#sesion').addEventListener('click', (e) => {
+  if (e.target.id !== 'salir') return;
+  tokenEnMemoria = null;
+  guardarToken(null);
+  mostrarSesion(null);
+  location.reload();
+});
+
+async function api(ruta, params = {}, reintento = true) {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
-  const resp = await fetch(`${API}${ruta}${qs.size ? `?${qs}` : ''}`);
+  const headers = tokenEnMemoria ? { Authorization: `Bearer ${tokenEnMemoria}` } : {};
+  const resp = await fetch(`${API}${ruta}${qs.size ? `?${qs}` : ''}`, { headers });
+  if (resp.status === 401 && reintento) {
+    tokenEnMemoria = null;
+    guardarToken(null);
+    await pedirLogin();
+    return api(ruta, params, false);
+  }
   const data = await resp.json();
   if (!resp.ok) throw new Error(data.error || `Error ${resp.status}`);
   return data;
+}
+
+// Si ya hay un token guardado, mostrar quién está conectado
+if (tokenEnMemoria) {
+  fetch('/api/auth/yo', { headers: { Authorization: `Bearer ${tokenEnMemoria}` } })
+    .then((r) => (r.ok ? r.json() : null)).then((u) => { if (u) mostrarSesion(u); else { tokenEnMemoria = null; guardarToken(null); } })
+    .catch(() => {});
 }
 
 function mensaje(destino, texto, error = false) {
@@ -42,6 +107,7 @@ document.querySelectorAll('[role="tab"]').forEach((tab) => {
     document.querySelectorAll('[role="tab"]').forEach((t) => t.setAttribute('aria-selected', t === tab));
     document.querySelectorAll('.panel').forEach((p) => { p.hidden = p.id !== tab.dataset.panel; });
     if (tab.dataset.panel === 'p-triangulaciones') cargarTriangulaciones();
+    if (tab.dataset.panel === 'p-matriz' && !matrizEstado.cargada) cargarMatriz();
   });
 });
 
@@ -288,5 +354,171 @@ async function cargarTriangulaciones() {
     mensaje(destino, err.message, true);
   }
 }
+
+// ---------- matriz ----------
+// Paleta categórica validada (orden fijo) + gris para "Resto". El color sigue a
+// la categoría, no a su ranking: se asigna por orden de total y se mantiene al
+// cambiar de vista US$/%.
+const COLORES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6'];
+const GRIS_RESTO = '#a3a29b';
+const millones = (v) => `US$ ${fmtNum.format(Math.round(v / 1e5) / 10)} M`;
+const pct = (v) => `${fmtNum.format(Math.round(v * 10) / 10)} %`;
+
+const matrizEstado = { cargada: false, nivel: 'seccion', seccion: null, vista: 'usd', grupos: null, datos: null, grafico: null, colores: {} };
+
+async function cargarMatriz() {
+  const destino = $('#r-matriz');
+  const params = { nivel: matrizEstado.nivel, seccion: matrizEstado.seccion };
+  if (matrizEstado.grupos) params.grupos = matrizEstado.grupos.join(',');
+  mensaje(destino, 'Calculando…');
+  try {
+    matrizEstado.datos = await api('/matriz', params);
+    matrizEstado.cargada = true;
+    if (!matrizEstado.grupos) matrizEstado.grupos = matrizEstado.datos.grupos.filter((g) => g.incluido).map((g) => g.codigo);
+    dibujarMatriz();
+  } catch (err) {
+    mensaje(destino, err.message, true);
+  }
+}
+
+function dibujarMatriz() {
+  const d = matrizEstado.datos;
+  const vista = matrizEstado.vista;
+
+  // Miga de pan
+  $('#m-miga').innerHTML = d.nivel === 'capitulo'
+    ? `<a href="#" data-volver>Secciones</a><span class="sep">›</span>${esc(d.seccion.codigo)} · ${esc(d.seccion.descrip)}`
+    : 'Secciones de la NCM';
+
+  // Grupos de operaciones (casillas)
+  $('#m-grupos').innerHTML = '<legend>Operaciones incluidas</legend>' + d.grupos.map((g) => `
+    <label><input type="checkbox" value="${esc(g.codigo)}" ${g.incluido ? 'checked' : ''}> ${esc(g.descrip)}</label>`).join('');
+
+  const valor = (cat, p) => (vista === 'pct'
+    ? (d.totales[p] ? (cat.por_periodo[p] * 100) / d.totales[p] : 0)
+    : cat.por_periodo[p]);
+
+  // Gráfico: las 7 categorías más grandes con color propio, el resto junto en gris
+  // Las categorías con color se eligen la primera vez que se ve cada nivel y se
+  // conservan: al tildar o destildar operaciones no cambian los colores.
+  const orden = [...d.categorias].filter((c) => c.total > 0).sort((a, b) => b.total - a.total);
+  const clave = `${d.nivel}|${matrizEstado.seccion || ''}`;
+  if (!matrizEstado.colores[clave]) matrizEstado.colores[clave] = orden.slice(0, COLORES.length).map((c) => c.codigo);
+  const elegidas = matrizEstado.colores[clave];
+  const principales = elegidas.map((cod) => orden.find((c) => c.codigo === cod)).filter(Boolean);
+  const resto = orden.filter((c) => !elegidas.includes(c.codigo));
+  const datasets = principales.map((c, i) => ({
+    label: `${c.codigo} ${c.descrip}`,
+    codigo: c.codigo,
+    data: d.periodos.map((p) => valor(c, p)),
+    backgroundColor: COLORES[elegidas.indexOf(c.codigo)],
+  }));
+  if (resto.length) {
+    datasets.push({
+      label: `Resto (${resto.length})`,
+      codigo: null,
+      data: d.periodos.map((p) => resto.reduce((a, c) => a + valor(c, p), 0)),
+      backgroundColor: GRIS_RESTO,
+    });
+  }
+  datasets.forEach((ds) => Object.assign(ds, { borderColor: '#ffffff', borderWidth: { top: 2 }, borderSkipped: false, maxBarThickness: 120 }));
+
+  if (matrizEstado.grafico) matrizEstado.grafico.destroy();
+  matrizEstado.grafico = new Chart($('#m-grafico'), {
+    type: 'bar',
+    data: { labels: d.periodos.map(mes), datasets },
+    options: {
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'nearest', intersect: true },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { color: '#5b6b74' } },
+        y: {
+          stacked: true,
+          max: vista === 'pct' ? 100 : undefined,
+          grid: { color: '#e3e8e6' },
+          border: { display: false },
+          ticks: { color: '#5b6b74', callback: (v) => (vista === 'pct' ? `${v} %` : `${fmtNum.format(v / 1e6)} M`) },
+        },
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12, color: '#1d2b36', padding: 14 } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const p = d.periodos[ctx.dataIndex];
+              const usdVal = vista === 'pct' ? (ctx.raw * d.totales[p]) / 100 : ctx.raw;
+              const parte = d.totales[p] ? (usdVal * 100) / d.totales[p] : 0;
+              return ` ${ctx.dataset.label}: ${millones(usdVal)} (${pct(parte)})`;
+            },
+          },
+        },
+      },
+      onClick: (evt, elementos) => {
+        if (d.nivel !== 'seccion' || !elementos.length) return;
+        const codigo = datasets[elementos[0].datasetIndex].codigo;
+        if (codigo && codigo !== 'S/S') abrirSeccion(codigo);
+      },
+      onHover: (evt, elementos) => {
+        evt.native.target.style.cursor = d.nivel === 'seccion' && elementos.length ? 'pointer' : 'default';
+      },
+    },
+  });
+
+  // Nota: qué queda afuera
+  const excluidos = d.grupos.filter((g) => !g.incluido)
+    .map((g) => `${g.descrip}: ${millones(Object.values(g.por_periodo).reduce((a, v) => a + v, 0))}`);
+  $('#m-nota').textContent = 'FOB en dólares por mes de registro. Sólo importación a consumo: no incluye importación temporaria ni courier, que INDEC sí suma.'
+    + (excluidos.length ? ` Fuera del gráfico en el período: ${excluidos.join('; ')}.` : '')
+    + (d.nivel === 'seccion' ? ' Clic en una sección para ver sus capítulos.' : '');
+
+  // Tabla con todas las categorías (vista accesible y exacta)
+  const colorDe = new Map(principales.map((c) => [c.codigo, COLORES[elegidas.indexOf(c.codigo)]]));
+  const filas = d.categorias.filter((c) => c.total > 0).sort((a, b) => b.total - a.total).map((c) => `
+    <tr${d.nivel === 'seccion' && c.codigo !== 'S/S' ? ` class="clic" data-seccion="${esc(c.codigo)}"` : ''}>
+      <td><span class="muestra" style="background:${colorDe.get(c.codigo) || GRIS_RESTO}"></span><span class="codigo">${esc(c.codigo)}</span></td>
+      <td class="desc">${esc(c.descrip)}</td>
+      ${d.periodos.map((p) => `<td class="n">${vista === 'pct' ? pct(valor(c, p)) : millones(c.por_periodo[p])}</td>`).join('')}
+      <td class="n">${millones(c.total)}</td>
+    </tr>`);
+  const totalGeneral = Object.values(d.totales).reduce((a, v) => a + v, 0);
+  filas.push(`<tr class="total"><td colspan="2">Total</td>
+    ${d.periodos.map((p) => `<td class="n">${vista === 'pct' ? '100 %' : millones(d.totales[p])}</td>`).join('')}
+    <td class="n">${millones(totalGeneral)}</td></tr>`);
+  $('#r-matriz').innerHTML = tabla([
+    { titulo: d.nivel === 'capitulo' ? 'Cap.' : 'Sección' }, { titulo: 'Descripción' },
+    ...d.periodos.map((p) => ({ titulo: mes(p), n: true })), { titulo: 'Total', n: true },
+  ], filas);
+}
+
+function abrirSeccion(codigo) {
+  matrizEstado.nivel = 'capitulo';
+  matrizEstado.seccion = codigo;
+  cargarMatriz();
+}
+
+$('#m-miga').addEventListener('click', (e) => {
+  if (!e.target.closest('[data-volver]')) return;
+  e.preventDefault();
+  matrizEstado.nivel = 'seccion';
+  matrizEstado.seccion = null;
+  cargarMatriz();
+});
+
+$('#r-matriz').addEventListener('click', (e) => {
+  const fila = e.target.closest('[data-seccion]');
+  if (fila) abrirSeccion(fila.dataset.seccion);
+});
+
+$('#m-grupos').addEventListener('change', () => {
+  matrizEstado.grupos = [...document.querySelectorAll('#m-grupos input:checked')].map((i) => i.value);
+  cargarMatriz();
+});
+
+document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('click', () => {
+  matrizEstado.vista = b.dataset.vista;
+  document.querySelectorAll('[data-vista]').forEach((x) => x.setAttribute('aria-pressed', x === b));
+  if (matrizEstado.datos) dibujarMatriz();
+}));
 
 cargarPeriodos().then(cargarLista);

@@ -1,4 +1,6 @@
-// Crea la base comex y sus tablas ejecutando db/01_schema.sql.
+// Crea la base comex y sus tablas ejecutando db/01_schema.sql, y crea o
+// actualiza las tablas de la matriz (db/06_matriz.sql: secciones, capítulos
+// y grupos de destinación). Repetirlo sobre una base existente sólo hace esto último.
 //
 //   npm run base               crea la base si no existe
 //   npm run base -- --recrear  BORRA la base con todos sus datos y la vuelve a crear
@@ -9,6 +11,13 @@ const path = require('path');
 const { conectar } = require('./lib/conexion');
 
 const ESQUEMA = path.join(__dirname, '..', 'db', '01_schema.sql');
+const MATRIZ = path.join(__dirname, '..', 'db', '06_matriz.sql');
+
+async function actualizarMatriz(db, base) {
+  await db.query(`USE \`${base}\``);
+  await db.query(fs.readFileSync(MATRIZ, 'utf8'));
+  console.log('Tablas de la matriz (secciones, capítulos, grupos de destinación) al día.');
+}
 
 async function main() {
   const recrear = process.argv.includes('--recrear');
@@ -19,8 +28,9 @@ async function main() {
     const [existe] = await db.query(
       "SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = 'caratula'", [base]);
     if (existe.length && !recrear) {
-      console.log(`La base ${base} ya existe con sus tablas; no se toca nada.`);
+      console.log(`La base ${base} ya existe con sus tablas; no se borra nada.`);
       console.log('Para borrarla y crearla de nuevo (se pierden los datos): npm run base -- --recrear');
+      await actualizarMatriz(db, base);
       return;
     }
     if (recrear) {
@@ -28,6 +38,7 @@ async function main() {
       console.log(`Base ${base} borrada.`);
     }
     await db.query(fs.readFileSync(ESQUEMA, 'utf8'));
+    await actualizarMatriz(db, base);
     const [tablas] = await db.query(
       'SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = ?', [base]);
     console.log(`Base ${base} creada con ${tablas[0].n} tablas. Siguiente paso: npm run kit`);
