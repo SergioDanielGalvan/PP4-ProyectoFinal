@@ -19,6 +19,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------- barra superior ---------- */
 .barra {
   display: flex;
   align-items: baseline;
@@ -34,9 +35,11 @@ h2 { font-size: 1.125rem; margin: 2.5rem 0 .75rem; }
 .periodo { display: flex; gap: .5rem; align-items: center; color: var(--tenue); }
 .periodo select { max-width: 100%; }
 
+/* ---------- pestañas ---------- */
 .pestanias {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   padding: 0 clamp(1rem, 4vw, 3rem);
   border-bottom: 1px solid var(--linea);
 }
@@ -52,10 +55,45 @@ h2 { font-size: 1.125rem; margin: 2.5rem 0 .75rem; }
 }
 .pestanias button[aria-selected="true"] { color: var(--tinta); font-weight: 600; border-bottom-color: var(--sello); }
 
-main { padding: 1.5rem clamp(1rem, 4vw, 3rem) 4rem; max-width: 72rem; }
+/* ---------- contenedor principal ---------- */
+main {
+  max-width: 1200px;
+  margin: 1.5rem auto 3rem;
+  padding: 0 1.5rem;
+}
 
-.buscador { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; }
-.buscador label { color: var(--tenue); }
+/* ---------- buscador ---------- */
+.buscador {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  background: var(--hoja);
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  padding: 0.85rem 1.25rem;
+  margin: 1.5rem 0 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.buscador label {
+  font-weight: 600;
+  color: var(--tinta);
+  font-size: .9rem;
+}
+
+.buscador .campo-busqueda {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.buscador .acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
 
 input, select, button { font: inherit; }
 input, select {
@@ -68,8 +106,12 @@ input, select {
 #nro, #ncm { font-family: "IBM Plex Mono", Consolas, monospace; text-transform: uppercase; }
 #nro { width: 13.5rem; }
 .ncm-corto { width: 9rem; font-family: "IBM Plex Mono", Consolas, monospace; }
-tr.total td { font-weight: 700; background: var(--papel); }
-.ncm-link { color: var(--sello); }
+
+.buscador input,
+.buscador button {
+  height: 2.35rem;
+  box-sizing: border-box;
+}
 
 .buscador button {
   padding: .45rem 1rem;
@@ -82,10 +124,44 @@ tr.total td { font-weight: 700; background: var(--papel); }
 }
 :focus-visible { outline: 3px solid var(--sello); outline-offset: 2px; }
 
+.buscador button.btn-secundario {
+  background: var(--papel);
+  color: var(--tenue);
+  border: 1px solid var(--linea);
+  font-weight: 500;
+}
+
+.buscador button.btn-secundario:hover {
+  background: var(--linea);
+  color: var(--tinta);
+}
+
+/* ---------- ficha técnica y despacho ---------- */
+#r-despacho {
+  margin-top: 0rem;
+}
+
+.despacho-header,
+#r-despacho > header {
+  background: var(--hoja);
+  border: 1px solid var(--linea);
+  border-top: 3px solid var(--sello);
+  border-radius: 6px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 6px rgba(29, 43, 54, 0.04);
+}
+
+.despacho-header [data-campo="fob"],
+.despacho-header .fob-total {
+  color: var(--sello);
+  font-weight: 700;
+}
+
 /* Número de despacho en casillas, como en el formulario del SIM */
 .nro {
   display: inline-flex;
-  margin: 1.75rem 0 1rem;
+  margin: 0.5rem 0 1.25rem;
   font-family: "IBM Plex Mono", Consolas, monospace;
   font-size: clamp(1.25rem, 3vw, 2rem);
   border: 2px solid var(--tinta);
@@ -97,13 +173,51 @@ tr.total td { font-weight: 700; background: var(--papel); }
 
 .datos {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: .75rem 2rem;
-  margin: 0 0 1.5rem;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem 2rem;
+  margin: 0 0 2rem;
 }
-.datos div { border-top: 1px solid var(--linea); padding-top: .4rem; }
-.datos dt { color: var(--tenue); font-size: .875rem; }
-.datos dd { margin: 0; font-weight: 600; }
+
+.datos div {
+  border-top: 1px solid var(--linea);
+  padding-top: 0.5rem;
+}
+
+.datos dt {
+  color: var(--tenue);
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.datos dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--tinta);
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 900px) {
+  .datos {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .datos {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- tablas e ítems ---------- */
+.tabla-wrap,
+#r-despacho table {
+  background: var(--hoja);
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
 
 .tabla { overflow-x: auto; background: var(--hoja); border: 1px solid var(--linea); }
 table { border-collapse: collapse; width: 100%; font-size: .9375rem; }
@@ -111,16 +225,36 @@ th, td { padding: .5rem .75rem; text-align: left; border-bottom: 1px solid var(-
 th { font-weight: 600; color: var(--tenue); background: var(--papel); }
 td.n, th.n { text-align: right; }
 td.desc { white-space: normal; min-width: 16rem; max-width: 28rem; }
+tr.total td { font-weight: 700; background: var(--papel); }
 tr.aranceles td { background: var(--papel); color: var(--tenue); font-size: .875rem; white-space: normal; }
+
+#r-despacho tr.tributos td {
+  background: #f4f6f8;
+  border-top: 1px dashed var(--linea);
+  font-size: .8rem;
+  color: var(--tenue);
+}
+
 tr.bajo td { background: var(--alerta-fondo); }
 .proporcion { color: var(--alerta); font-weight: 700; }
 .codigo { font-family: "IBM Plex Mono", Consolas, monospace; font-size: .875rem; }
-
+.ncm-link { color: var(--sello); }
 a.nro-link { color: var(--sello); }
 
+/* ---------- notas y mensajes ---------- */
 .mensaje { margin: 1.5rem 0; padding: .75rem 1rem; border-left: 4px solid var(--sello); background: var(--hoja); }
 .mensaje.error { border-left-color: var(--alerta); }
 .nota { color: var(--tenue); max-width: 60ch; }
+#r-despacho .nota {
+  margin: 1.5rem 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tenue);
+  font-size: .875rem;
+  font-style: italic;
+  box-shadow: none;
+}
 
 /* ---------- matriz ---------- */
 .controles { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; }
@@ -139,10 +273,239 @@ tr.clic { cursor: pointer; }
 tr.clic:hover td { background: var(--papel); }
 
 /* ---------- sesión ---------- */
-.sesion { margin-left: auto; color: var(--tenue); font-size: .9375rem; }
-.sesion button { border: 0; background: none; color: var(--sello); text-decoration: underline; cursor: pointer; font: inherit; }
-#login { border: 1px solid var(--linea); border-radius: 4px; padding: 1.5rem; width: min(22rem, 90vw); }
-#login::backdrop { background: rgb(29 43 54 / .45); }
-#login h2 { margin: 0 0 1rem; }
-#login label { display: grid; gap: .25rem; margin-bottom: .75rem; color: var(--tenue); }
-#login button[type="submit"] { width: 100%; padding: .55rem; border: 0; border-radius: 3px; background: var(--sello); color: #fff; font-weight: 600; cursor: pointer; }
+.sesion {
+  margin-left: auto;
+  color: var(--tenue);
+  font-size: .875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.sesion button {
+  border: 0;
+  background: none;
+  color: var(--alerta);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: .2rem .4rem;
+}
+
+.sesion button:hover {
+  text-decoration: underline;
+}
+
+#login {
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  padding: 2.25rem 2rem 1.75rem;
+  width: min(23.5rem, 92vw);
+  background: var(--hoja);
+  box-shadow: 0 12px 30px -8px rgba(29, 43, 54, 0.2), 0 4px 12px -2px rgba(29, 43, 54, 0.08);
+}
+
+#login::backdrop {
+  background: rgba(29, 43, 54, 0.55);
+  backdrop-filter: blur(2.5px);
+}
+
+.login-header {
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+#login h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--tinta);
+  letter-spacing: .02em;
+}
+
+#login p.subtitulo {
+  margin: .3rem 0 0;
+  font-size: .875rem;
+  color: var(--tenue);
+  font-weight: 500;
+}
+
+#login label {
+  display: grid;
+  gap: .35rem;
+  margin-bottom: 1rem;
+  color: var(--tinta);
+  font-size: .85rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+#login input {
+  padding: .55rem .7rem;
+  font-size: .925rem;
+  border: 1px solid var(--linea);
+  border-radius: 4px;
+}
+
+#login button[type="submit"] {
+  width: 100%;
+  padding: .65rem;
+  margin-top: .5rem;
+  border: 0;
+  border-radius: 4px;
+  background: var(--sello);
+  color: #fff;
+  font-weight: 600;
+  font-size: .925rem;
+  cursor: pointer;
+  transition: opacity .15s ease, background-color .15s ease;
+}
+
+#login button[type="submit"]:hover {
+  opacity: .93;
+}
+
+/* Footer institucional al pie de la tarjeta */
+.login-footer {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--linea);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .4rem;
+}
+
+.desarrollado-por {
+  font-size: .75rem;
+  color: var(--tenue);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 500;
+}
+
+.brand-footer-img {
+  height: 52px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+/* Barra que agrupa el código SIM y las acciones de descarga */
+.despacho-barra-superior {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.despacho-barra-superior .nro {
+  margin: 0;
+}
+
+.despacho-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.despacho-acciones button {
+  height: 2.2rem;
+  font-size: 0.85rem;
+}
+
+/* ---------- REGLAS DE IMPRESIÓN Y PDF ---------- */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 1cm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 10pt !important;
+  }
+
+  /* 1. Ocultar navegación, buscador y textos explicativos */
+  .barra,
+  .pestanias,
+  .buscador,
+  .despacho-acciones,
+  h2,
+  #r-lista,
+  #p-subpartidas > p.nota,
+  #p-subpartidas > p {
+    display: none !important;
+  }
+
+  /* 2. Mantener visible el encabezado con los datos */
+  .reporte-print-header,
+  .reporte-print-header * {
+    display: block !important;
+  }
+
+  /* 3. Estilo tipo planilla Excel: bordes en todas las celdas y fondo gris en encabezados */
+  .tabla {
+    overflow: visible !important;
+    border: none !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 8.5pt !important;
+  }
+
+  th, td {
+    border: 1px solid #c0c0c0 !important; /* Cuadrícula estilo Excel */
+    padding: 5px 8px !important;
+    color: #000000 !important;
+  }
+
+  th {
+    background-color: #e9ecef !important; /* Encabezado gris clásico */
+    font-weight: 700 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  tr.total td {
+    background-color: #f1f3f5 !important;
+    font-weight: 700 !important;
+    border-top: 2px solid #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 4. Quitar color azul y subrayado de links web */
+  a, a.ncm-link {
+    color: #000000 !important;
+    text-decoration: none !important;
+  }
+  
+  #p-triangulaciones .nota,
+  #p-triangulaciones > p {
+    display: none !important;
+  }
+}
+
+
+/* ---------- mejoras para subpartidas ---------- */
+#r-subpartidas .despacho-acciones {
+  margin-bottom: 0.75rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+#r-subpartidas tr:hover td {
+  background-color: #f0f4f8;
+}
+
+#r-subpartidas tr.total td {
+  background-color: #e2e8f0;
+  font-weight: 700;
+  border-top: 2px solid var(--tinta);
+}
