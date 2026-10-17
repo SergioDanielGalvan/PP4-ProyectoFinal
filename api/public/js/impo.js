@@ -927,40 +927,97 @@ function dibujarMatriz() {
   filas.push(`<tr class="total"><td colspan="2">Total</td>
     ${d.periodos.map((p) => `<td class="n">${vista === 'pct' ? '100 %' : millones(d.totales[p])}</td>`).join('')}
     <td class="n">${millones(totalGeneral)}</td></tr>`);
-  $('#r-matriz').innerHTML = tabla([
+
+  // 1. Barra de botones 
+  const barraAcciones = `
+    <div class="despacho-acciones" style="margin: 1.25rem 0 0.75rem 0; display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <button type="button" id="b-matriz-excel" class="btn-secundario">Exportar (CSV)</button>
+      <button type="button" id="b-matriz-pdf" class="btn-secundario">Imprimir</button>
+    </div>`;
+
+  // 2. Encabezado visible al imprimir / PDF
+  const encabezadoReporte = `
+    <div class="reporte-print-header" style="margin-bottom: 0.75rem;">
+      <h2 style="margin: 0 0 0.25rem 0;">Matriz COMEX - ${d.nivel === 'capitulo' ? `Capítulos de ${esc(d.seccion.codigo)}` : 'Secciones NCM'}</h2>
+      <p style="margin: 0; color: #555; font-size: 0.9rem;">
+        <strong>Nivel:</strong> ${d.nivel === 'capitulo' ? esc(d.seccion.descrip) : 'General por Secciones'} · 
+        <strong>Vista:</strong> ${vista === 'pct' ? 'Porcentaje (%)' : 'Valores FOB (USD)'}
+      </p>
+    </div>`;
+
+  // 3. Renderizar barra + encabezado + tabla
+  $('#r-matriz').innerHTML = barraAcciones + encabezadoReporte + tabla([
     { titulo: d.nivel === 'capitulo' ? 'Cap.' : 'Sección' }, { titulo: 'Descripción' },
     ...d.periodos.map((p) => ({ titulo: mes(p), n: true })), { titulo: 'Total', n: true },
   ], filas);
+
+  // 4. Funcionalidad de Imprimir / PDF
+  const btnMatrizPdf = document.getElementById('b-matriz-pdf');
+  if (btnMatrizPdf) {
+    btnMatrizPdf.onclick = () => {
+      const titOriginal = document.title;
+      document.title = `Matriz_${d.nivel}_${matrizEstado.seccion || 'General'}`;
+      window.print();
+      document.title = titOriginal;
+    };
+  }
+
+  // 5. Funcionalidad de Exportar Excel (CSV)
+  const btnMatrizXls = document.getElementById('b-matriz-excel');
+  if (btnMatrizXls) {
+    btnMatrizXls.onclick = () => {
+      const limpiar = (val) => {
+        if (val === null || val === undefined) return '';
+        return String(val).split('"').join('""').split('\n').join(' ').split('\r').join('').trim();
+      };
+
+      const lineas = [
+        ['SISTEMA COMEX - MATRIZ'],
+        ['Nivel', d.nivel === 'capitulo' ? `Capitulos de ${d.seccion.codigo} - ${d.seccion.descrip}` : 'Secciones NCM'],
+        ['Vista', vista === 'pct' ? 'Porcentaje' : 'Valores FOB USD'],
+        [],
+        [
+          d.nivel === 'capitulo' ? 'Capitulo' : 'Seccion',
+          'Descripcion',
+          ...d.periodos.map(p => mes(p)),
+          'Total'
+        ]
+      ];
+
+      // Filas de datos
+      d.categorias.filter((c) => c.total > 0).sort((a, b) => b.total - a.total).forEach((c) => {
+        lineas.push([
+          c.codigo,
+          c.descrip,
+          ...d.periodos.map((p) => {
+            const v = valor(c, p);
+            return vista === 'pct' ? `${(Math.round(v * 10) / 10).toString().replace('.', ',')} %` : (Math.round(v * 100) / 100).toString().replace('.', ',');
+          }),
+          vista === 'pct' ? '' : (Math.round(c.total * 100) / 100).toString().replace('.', ',')
+        ]);
+      });
+
+      // Fila de totales
+      lineas.push([]);
+      lineas.push([
+        'TOTAL',
+        '',
+        ...d.periodos.map((p) => vista === 'pct' ? '100 %' : (Math.round(d.totales[p] * 100) / 100).toString().replace('.', ',')),
+        vista === 'pct' ? '100 %' : (Math.round(totalGeneral * 100) / 100).toString().replace('.', ',')
+      ]);
+
+      const csvContent = '\uFEFF' + lineas
+        .map((fila) => fila.map((col) => '"' + limpiar(col) + '"').join(';'))
+        .join('\r\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const enlace = document.createElement('a');
+      enlace.href = URL.createObjectURL(blob);
+      enlace.setAttribute('download', `Matriz_${d.nivel}_${matrizEstado.seccion || 'General'}.csv`);
+      document.body.appendChild(enlace);
+      enlace.click();
+      document.body.removeChild(enlace);
+      setTimeout(() => URL.revokeObjectURL(enlace.href), 1000);
+    };
+  }
 }
-
-function abrirSeccion(codigo) {
-  matrizEstado.nivel = 'capitulo';
-  matrizEstado.seccion = codigo;
-  cargarMatriz();
-}
-
-$('#m-miga').addEventListener('click', (e) => {
-  if (!e.target.closest('[data-volver]')) return;
-  e.preventDefault();
-  matrizEstado.nivel = 'seccion';
-  matrizEstado.seccion = null;
-  cargarMatriz();
-});
-
-$('#r-matriz').addEventListener('click', (e) => {
-  const fila = e.target.closest('[data-seccion]');
-  if (fila) abrirSeccion(fila.dataset.seccion);
-});
-
-$('#m-grupos').addEventListener('change', () => {
-  matrizEstado.grupos = [...document.querySelectorAll('#m-grupos input:checked')].map((i) => i.value);
-  cargarMatriz();
-});
-
-document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('click', () => {
-  matrizEstado.vista = b.dataset.vista;
-  document.querySelectorAll('[data-vista]').forEach((x) => x.setAttribute('aria-pressed', x === b));
-  if (matrizEstado.datos) dibujarMatriz();
-}));
-
-cargarPeriodos().then(cargarLista);

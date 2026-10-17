@@ -490,6 +490,11 @@ tr.clic:hover td { background: var(--papel); }
   #p-triangulaciones > p {
     display: none !important;
   }
+  #m-grupos,
+  .matriz-vistas,
+  [data-vista] {
+    display: none !important;
+  }
 }
 
 
