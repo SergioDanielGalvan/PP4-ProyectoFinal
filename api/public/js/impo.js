@@ -1021,3 +1021,35 @@ function dibujarMatriz() {
     };
   }
 }
+
+function abrirSeccion(codigo) {
+  matrizEstado.nivel = 'capitulo';
+  matrizEstado.seccion = codigo;
+  cargarMatriz();
+}
+
+$('#m-miga').addEventListener('click', (e) => {
+  if (!e.target.closest('[data-volver]')) return;
+  e.preventDefault();
+  matrizEstado.nivel = 'seccion';
+  matrizEstado.seccion = null;
+  cargarMatriz();
+});
+
+$('#r-matriz').addEventListener('click', (e) => {
+  const fila = e.target.closest('[data-seccion]');
+  if (fila) abrirSeccion(fila.dataset.seccion);
+});
+
+$('#m-grupos').addEventListener('change', () => {
+  matrizEstado.grupos = [...document.querySelectorAll('#m-grupos input:checked')].map((i) => i.value);
+  cargarMatriz();
+});
+
+document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('click', () => {
+  matrizEstado.vista = b.dataset.vista;
+  document.querySelectorAll('[data-vista]').forEach((x) => x.setAttribute('aria-pressed', x === b));
+  if (matrizEstado.datos) dibujarMatriz();
+}));
+
+cargarPeriodos().then(cargarLista);
