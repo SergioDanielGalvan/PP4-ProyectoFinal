@@ -1,408 +1,68 @@
 :root {
-  --papel: #f4f6f5;
   --hoja: #ffffff;
-  --tinta: #1d2b36;
-  --tenue: #5b6b74;
-  --linea: #cbd5d1;
-  --sello: #1f5f8b;
-  --alerta: #b42318;
-  --alerta-fondo: #fdecea;
+  --tinta: #0f172a;
+  --tenue: #64748b;
+  --linea: #e2e8f0;
+  --sello: #1d4ed8;
+  --sello-hover: #1e40af;
+  --alerta: #b91c1c;
+  --alerta-fondo: #fef2f2;
 }
 
-* { box-sizing: border-box; }
-
 body {
-  margin: 0;
-  background: var(--papel);
+  background-color: #f8fafc;
   color: var(--tinta);
-  font: 16px/1.5 "Public Sans", "Segoe UI", Arial, sans-serif;
+  font-family: 'Public Sans', system-ui, -apple-system, sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- barra superior ---------- */
-.barra {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: .5rem 1rem;
-  padding: 1.25rem clamp(1rem, 4vw, 3rem) .75rem;
-  border-bottom: 2px solid var(--tinta);
-}
-h1 { margin: 0; font-size: 1.75rem; font-weight: 700; letter-spacing: -.01em; }
-h2 { font-size: 1.125rem; margin: 2.5rem 0 .75rem; }
-
-.periodo { display: flex; gap: .5rem; align-items: center; color: var(--tenue); }
-.periodo select { max-width: 100%; }
-
-/* ---------- pestañas ---------- */
-.pestanias {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  padding: 0 clamp(1rem, 4vw, 3rem);
-  border-bottom: 1px solid var(--linea);
-}
-.pestanias button {
-  border: 0;
-  background: none;
-  padding: .75rem 1rem;
-  font: inherit;
-  color: var(--tenue);
-  cursor: pointer;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -1px;
-}
-.pestanias button[aria-selected="true"] { color: var(--tinta); font-weight: 600; border-bottom-color: var(--sello); }
-
-/* ---------- contenedor principal ---------- */
-main {
-  max-width: 1200px;
-  margin: 1.5rem auto 3rem;
-  padding: 0 1.5rem;
+/* Ancho máximo uniforme */
+.container-fluid {
+  max-width: 1400px;
 }
 
-/* ---------- buscador ---------- */
-.buscador {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  background: var(--hoja);
-  border: 1px solid var(--linea);
-  border-radius: 6px;
-  padding: 0.85rem 1.25rem;
-  margin: 1.5rem 0 1rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+/* Tipografías monoespaciadas para códigos SIM y NCM */
+.codigo, 
+.nro span, 
+code, 
+.font-monospace {
+  font-family: 'IBM Plex Mono', Consolas, monospace !important;
 }
 
-.buscador label {
-  font-weight: 600;
-  color: var(--tinta);
-  font-size: .9rem;
-}
-
-.buscador .campo-busqueda {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.buscador .acciones {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-input, select, button { font: inherit; }
-input, select {
-  padding: .45rem .6rem;
-  border: 1px solid var(--linea);
-  border-radius: 3px;
-  background: var(--hoja);
-  color: var(--tinta);
-}
-#nro, #ncm { font-family: "IBM Plex Mono", Consolas, monospace; text-transform: uppercase; }
-#nro { width: 13.5rem; }
-.ncm-corto { width: 9rem; font-family: "IBM Plex Mono", Consolas, monospace; }
-
-.buscador input,
-.buscador button {
-  height: 2.35rem;
-  box-sizing: border-box;
-}
-
-.buscador button {
-  padding: .45rem 1rem;
-  border: 0;
-  border-radius: 3px;
-  background: var(--sello);
-  color: #fff;
-  font-weight: 600;
-  cursor: pointer;
-}
-:focus-visible { outline: 3px solid var(--sello); outline-offset: 2px; }
-
-.buscador button.btn-secundario {
-  background: var(--papel);
-  color: var(--tenue);
-  border: 1px solid var(--linea);
-  font-weight: 500;
-}
-
-.buscador button.btn-secundario:hover {
-  background: var(--linea);
-  color: var(--tinta);
-}
-
-/* ---------- ficha técnica y despacho ---------- */
-#r-despacho {
-  margin-top: 0rem;
-}
-
-.despacho-header,
-#r-despacho > header {
-  background: var(--hoja);
-  border: 1px solid var(--linea);
-  border-top: 3px solid var(--sello);
-  border-radius: 6px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 2px 6px rgba(29, 43, 54, 0.04);
-}
-
-.despacho-header [data-campo="fob"],
-.despacho-header .fob-total {
-  color: var(--sello);
-  font-weight: 700;
-}
-
-/* Número de despacho en casillas, como en el formulario del SIM */
+/* ---------- Número de despacho estilo SIM ---------- */
 .nro {
   display: inline-flex;
-  margin: 0.5rem 0 1.25rem;
-  font-family: "IBM Plex Mono", Consolas, monospace;
-  font-size: clamp(1.25rem, 3vw, 2rem);
+  font-family: 'IBM Plex Mono', Consolas, monospace;
+  font-size: clamp(1.15rem, 2.2vw, 1.65rem);
+  font-weight: 600;
   border: 2px solid var(--tinta);
   background: var(--hoja);
-}
-.nro span { padding: .15em .45em; border-right: 1px solid var(--linea); }
-.nro span:last-child { border-right: 0; }
-.nro span[title] { cursor: help; }
-
-.datos {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1.25rem 2rem;
-  margin: 0 0 2rem;
-}
-
-.datos div {
-  border-top: 1px solid var(--linea);
-  padding-top: 0.5rem;
-}
-
-.datos dt {
-  color: var(--tenue);
-  font-size: 0.85rem;
-  margin-bottom: 0.25rem;
-}
-
-.datos dd {
-  margin: 0;
-  font-weight: 600;
-  color: var(--tinta);
-  font-size: 0.95rem;
-  line-height: 1.35;
-}
-
-@media (max-width: 900px) {
-  .datos {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 520px) {
-  .datos {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ---------- tablas e ítems ---------- */
-.tabla-wrap,
-#r-despacho table {
-  background: var(--hoja);
-  border: 1px solid var(--linea);
   border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.tabla { overflow-x: auto; background: var(--hoja); border: 1px solid var(--linea); }
-table { border-collapse: collapse; width: 100%; font-size: .9375rem; }
-th, td { padding: .5rem .75rem; text-align: left; border-bottom: 1px solid var(--linea); white-space: nowrap; }
-th { font-weight: 600; color: var(--tenue); background: var(--papel); }
-td.n, th.n { text-align: right; }
-td.desc { white-space: normal; min-width: 16rem; max-width: 28rem; }
-tr.total td { font-weight: 700; background: var(--papel); }
-tr.aranceles td { background: var(--papel); color: var(--tenue); font-size: .875rem; white-space: normal; }
-
-#r-despacho tr.tributos td {
-  background: #f4f6f8;
-  border-top: 1px dashed var(--linea);
-  font-size: .8rem;
-  color: var(--tenue);
+.nro span { 
+  padding: .2em .55em; 
+  border-right: 1px solid var(--linea); 
 }
 
-tr.bajo td { background: var(--alerta-fondo); }
-.proporcion { color: var(--alerta); font-weight: 700; }
-.codigo { font-family: "IBM Plex Mono", Consolas, monospace; font-size: .875rem; }
-.ncm-link { color: var(--sello); }
-a.nro-link { color: var(--sello); }
-
-/* ---------- notas y mensajes ---------- */
-.mensaje { margin: 1.5rem 0; padding: .75rem 1rem; border-left: 4px solid var(--sello); background: var(--hoja); }
-.mensaje.error { border-left-color: var(--alerta); }
-.nota { color: var(--tenue); max-width: 60ch; }
-#r-despacho .nota {
-  margin: 1.5rem 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--tenue);
-  font-size: .875rem;
-  font-style: italic;
-  box-shadow: none;
+.nro span:last-child { 
+  border-right: 0; 
 }
 
-/* ---------- matriz ---------- */
-.controles { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; }
-.miga { font-size: 1.125rem; font-weight: 600; }
-.miga a { color: var(--sello); }
-.miga .sep { color: var(--tenue); margin: 0 .4rem; font-weight: 400; }
-.vista { display: inline-flex; border: 1px solid var(--linea); border-radius: 3px; overflow: hidden; }
-.vista button { border: 0; background: var(--hoja); padding: .35rem .8rem; cursor: pointer; color: var(--tenue); }
-.vista button[aria-pressed="true"] { background: var(--sello); color: #fff; font-weight: 600; }
-.grupos { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; border: 0; padding: 0; margin: 1rem 0; }
-.grupos legend { color: var(--tenue); font-size: .875rem; padding: 0; margin-bottom: .25rem; }
-.grupos label { display: inline-flex; gap: .35rem; align-items: center; font-size: .9375rem; cursor: pointer; }
-.grafico { position: relative; height: clamp(18rem, 45vh, 26rem); background: var(--hoja); border: 1px solid var(--linea); padding: .75rem; }
-.muestra { display: inline-block; width: .75rem; height: .75rem; border-radius: 2px; margin-right: .4rem; vertical-align: -1px; }
-tr.clic { cursor: pointer; }
-tr.clic:hover td { background: var(--papel); }
-
-/* ---------- sesión ---------- */
-.sesion {
-  margin-left: auto;
-  color: var(--tenue);
-  font-size: .875rem;
-  display: inline-flex;
-  align-items: center;
-  gap: .4rem;
+.nro span[title] { 
+  cursor: help; 
 }
 
-.sesion button {
-  border: 0;
-  background: none;
-  color: var(--alerta);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  padding: .2rem .4rem;
-}
-
-.sesion button:hover {
-  text-decoration: underline;
-}
-
-#login {
-  border: 1px solid var(--linea);
-  border-radius: 8px;
-  padding: 2.25rem 2rem 1.75rem;
-  width: min(23.5rem, 92vw);
-  background: var(--hoja);
-  box-shadow: 0 12px 30px -8px rgba(29, 43, 54, 0.2), 0 4px 12px -2px rgba(29, 43, 54, 0.08);
-}
-
-#login::backdrop {
-  background: rgba(29, 43, 54, 0.55);
-  backdrop-filter: blur(2.5px);
-}
-
-.login-header {
-  margin-bottom: 1.5rem;
-  text-align: center;
-}
-
-#login h2 {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--tinta);
-  letter-spacing: .02em;
-}
-
-#login p.subtitulo {
-  margin: .3rem 0 0;
-  font-size: .875rem;
-  color: var(--tenue);
-  font-weight: 500;
-}
-
-#login label {
-  display: grid;
-  gap: .35rem;
-  margin-bottom: 1rem;
-  color: var(--tinta);
-  font-size: .85rem;
-  font-weight: 600;
-  text-align: left;
-}
-
-#login input {
-  padding: .55rem .7rem;
-  font-size: .925rem;
-  border: 1px solid var(--linea);
-  border-radius: 4px;
-}
-
-#login button[type="submit"] {
-  width: 100%;
-  padding: .65rem;
-  margin-top: .5rem;
-  border: 0;
-  border-radius: 4px;
-  background: var(--sello);
-  color: #fff;
-  font-weight: 600;
-  font-size: .925rem;
-  cursor: pointer;
-  transition: opacity .15s ease, background-color .15s ease;
-}
-
-#login button[type="submit"]:hover {
-  opacity: .93;
-}
-
-/* Footer institucional al pie de la tarjeta */
-.login-footer {
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--linea);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: .4rem;
-}
-
-.desarrollado-por {
-  font-size: .75rem;
-  color: var(--tenue);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  font-weight: 500;
-}
-
-.brand-footer-img {
-  height: 52px;
-  width: auto;
-  object-fit: contain;
-  display: block;
-}
-
-/* Barra que agrupa el código SIM y las acciones de descarga */
+/* ---------- Barra de acciones y ficha de despacho ---------- */
 .despacho-barra-superior {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
-  margin: 0.5rem 0 1.25rem;
-}
-
-.despacho-barra-superior .nro {
-  margin: 0;
+  margin: 0.25rem 0 1.25rem;
 }
 
 .despacho-acciones {
@@ -411,12 +71,188 @@ tr.clic:hover td { background: var(--papel); }
   gap: 0.5rem;
 }
 
+/* Botones Exportar e Imprimir */
 .despacho-acciones button {
-  height: 2.2rem;
-  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.375rem;
+  border: 1px solid #cbd5e1;
+  background: var(--hoja);
+  color: #334155;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease-in-out;
 }
 
-/* ---------- REGLAS DE IMPRESIÓN Y PDF ---------- */
+.despacho-acciones button:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: var(--tinta);
+}
+
+/* Tarjeta contenedora de datos del despacho */
+#r-despacho > header,
+.despacho-header {
+  background: var(--hoja);
+  border: 1px solid var(--linea);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+/* Grilla de metadatos del despacho */
+.datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem 1.5rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.datos div {
+  border-top: 2px solid var(--linea);
+  padding-top: 0.45rem;
+}
+
+.datos dt {
+  color: var(--tenue);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  margin-bottom: 0.2rem;
+}
+
+.datos dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--tinta);
+  font-size: 0.925rem;
+  line-height: 1.35;
+}
+
+/* ---------- Tablas aduaneras ---------- */
+.tabla-wrap, 
+.tabla {
+  width: 100%;
+  overflow-x: auto;
+  background: var(--hoja);
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  margin-bottom: 1.5rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+th, td {
+  padding: 0.65rem 0.85rem;
+  text-align: left;
+  border-bottom: 1px solid var(--linea);
+  white-space: nowrap;
+}
+
+th {
+  background: #f1f5f9;
+  font-weight: 600;
+  color: var(--tenue);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+}
+
+td.n, th.n { text-align: right; }
+td.desc { white-space: normal; min-width: 16rem; max-width: 28rem; }
+
+tbody tr:hover td {
+  background-color: #f8fafc;
+}
+
+tr.total td {
+  font-weight: 700;
+  background-color: #f1f5f9;
+  border-top: 2px solid var(--tinta);
+}
+
+/* Fila de tributos e impuestos aduaneros */
+tr.aranceles td,
+tr.tributos td {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-family: 'IBM Plex Mono', Consolas, monospace !important;
+  font-size: 0.75rem !important;
+  letter-spacing: -0.01em;
+  white-space: normal;
+  border-top: 1px dashed var(--linea);
+  padding: 0.45rem 0.85rem !important;
+}
+
+tr.bajo td { background: var(--alerta-fondo); }
+.proporcion { color: var(--alerta); font-weight: 700; }
+
+a.ncm-link, a.nro-link {
+  color: var(--sello);
+  text-decoration: none;
+  font-weight: 600;
+}
+a.ncm-link:hover, a.nro-link:hover {
+  text-decoration: underline;
+}
+
+/* Indicadores de Matriz */
+.muestra { 
+  display: inline-block; 
+  width: 0.75rem; 
+  height: 0.75rem; 
+  border-radius: 2px; 
+  margin-right: 0.4rem; 
+  vertical-align: -1px; 
+}
+tr.clic { cursor: pointer; }
+
+/* ---------- Pestañas (Tabs) ---------- */
+.nav-tabs {
+  border-bottom: 2px solid #e2e8f0;
+  gap: 0.25rem;
+}
+
+.nav-tabs .nav-link {
+  border: 1px solid transparent !important;
+  border-bottom: 2px solid transparent !important;
+  margin-bottom: -2px;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  background: transparent;
+  color: #64748b !important;
+  font-weight: 500;
+  transition: all 0.15s ease-in-out;
+}
+
+.nav-tabs .nav-link:hover {
+  color: #0f172a !important;
+  background-color: #f1f5f9;
+}
+
+.nav-tabs .nav-link.active,
+.nav-tabs .nav-link[aria-selected="true"] {
+  color: #1d4ed8 !important;
+  font-weight: 600 !important;
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 #e2e8f0 transparent !important;
+  border-bottom: 2px solid #ffffff !important;
+  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.02);
+}
+
+/* ---------- Reglas de Impresión y PDF ---------- */
 @media print {
   @page {
     size: A4 landscape;
@@ -429,28 +265,24 @@ tr.clic:hover td { background: var(--papel); }
     font-size: 10pt !important;
   }
 
-  /* 1. Ocultar navegación, buscador y textos explicativos */
-  .barra,
+  header.navbar,
   .pestanias,
-  .buscador,
+  .card-filtro,
   .despacho-acciones,
-  h2,
-  #r-lista,
-  #p-subpartidas > p.nota,
-  #p-subpartidas > p {
+  .alert,
+  #r-lista {
     display: none !important;
   }
 
-  /* 2. Mantener visible el encabezado con los datos */
   .reporte-print-header,
   .reporte-print-header * {
     display: block !important;
   }
 
-  /* 3. Estilo tipo planilla Excel: bordes en todas las celdas y fondo gris en encabezados */
-  .tabla {
+  .tabla-wrap, .tabla {
     overflow: visible !important;
     border: none !important;
+    box-shadow: none !important;
   }
 
   table {
@@ -460,13 +292,13 @@ tr.clic:hover td { background: var(--papel); }
   }
 
   th, td {
-    border: 1px solid #c0c0c0 !important; /* Cuadrícula estilo Excel */
+    border: 1px solid #c0c0c0 !important;
     padding: 5px 8px !important;
     color: #000000 !important;
   }
 
   th {
-    background-color: #e9ecef !important; /* Encabezado gris clásico */
+    background-color: #e9ecef !important;
     font-weight: 700 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -480,37 +312,8 @@ tr.clic:hover td { background: var(--papel); }
     print-color-adjust: exact !important;
   }
 
-  /* 4. Quitar color azul y subrayado de links web */
   a, a.ncm-link {
     color: #000000 !important;
     text-decoration: none !important;
   }
-  
-  #p-triangulaciones .nota,
-  #p-triangulaciones > p {
-    display: none !important;
-  }
-  #m-grupos,
-  .matriz-vistas,
-  [data-vista] {
-    display: none !important;
-  }
-}
-
-
-/* ---------- mejoras para subpartidas ---------- */
-#r-subpartidas .despacho-acciones {
-  margin-bottom: 0.75rem;
-  display: flex;
-  justify-content: flex-end;
-}
-
-#r-subpartidas tr:hover td {
-  background-color: #f0f4f8;
-}
-
-#r-subpartidas tr.total td {
-  background-color: #e2e8f0;
-  font-weight: 700;
-  border-top: 2px solid var(--tinta);
 }
