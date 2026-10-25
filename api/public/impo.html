@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/impo.css">
+  <link rel="icon" href="img/logo-mocosoft.png">
 </head>
 <body>
   <header class="barra">
@@ -31,9 +32,14 @@
   <main>
     <section id="p-despacho" class="panel">
       <form id="f-despacho" class="buscador">
-        <label for="nro">Número de despacho</label>
-        <input id="nro" maxlength="16" placeholder="26001IC04151676V" title="Con o sin la letra verificadora" autocomplete="off" spellcheck="false">
-        <button type="submit">Buscar despacho</button>
+        <div class="campo-busqueda">
+          <label for="nro">Número de despacho</label>
+          <input id="nro" maxlength="16" placeholder="26001IC04151676V" title="Con o sin la letra verificadora" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="acciones">
+          <button type="submit">Buscar despacho</button>
+          <button type="button" id="b-limpiar" class="btn-secundario">Limpiar</button>
+        </div>
       </form>
       <div id="r-despacho"></div>
       <h2>Últimos despachos</h2>
@@ -42,11 +48,16 @@
 
     <section id="p-subpartidas" class="panel" hidden>
       <form id="f-subpartidas" class="buscador">
-        <label for="desde">Desde</label>
-        <input id="desde" class="ncm-corto" placeholder="8471" autocomplete="off">
-        <label for="hasta">hasta</label>
-        <input id="hasta" class="ncm-corto" placeholder="8473 (opcional)" autocomplete="off">
-        <button type="submit">Ver subpartidas</button>
+        <div class="campo-busqueda">
+          <label for="desde">Desde</label>
+          <input type="text" id="desde" class="ncm-corto" placeholder="8471" autocomplete="off">
+          <label for="hasta" style="margin-left: 0.5rem;">hasta</label>
+          <input type="text" id="hasta" class="ncm-corto" placeholder="8473 (opcional)" style="width: 10.5rem;" autocomplete="off">
+        </div>
+        <div class="acciones">
+          <button type="submit">Ver subpartidas</button>
+          <button type="button" id="b-limpiar-subpartidas" class="btn-secundario">Limpiar</button>
+        </div>
       </form>
       <p class="nota">Capítulo (84), partida (8471), subpartida (8471.30) o NCM (8471.30.12). Cantidades y montos de cada subpartida NCM en el periodo elegido.</p>
       <div id="r-subpartidas"></div>
@@ -54,24 +65,34 @@
 
     <section id="p-ncm" class="panel" hidden>
       <form id="f-ncm" class="buscador">
-        <label for="ncm">Posición NCM</label>
-        <input id="ncm" placeholder="8471.30.12" autocomplete="off">
-        <label for="umbral">Marcar valores bajo el</label>
-        <select id="umbral">
-          <option value="0.3">30 % del promedio</option>
-          <option value="0.5" selected>50 % del promedio</option>
-          <option value="0.7">70 % del promedio</option>
-        </select>
-        <button type="submit">Comparar precios</button>
+        <div class="campo-busqueda">
+          <label for="ncm">Posición NCM</label>
+          <input type="text" id="ncm" class="ncm-corto" placeholder="8471.30.11" autocomplete="off">
+          <label for="umbral" style="margin-left: 0.5rem;">Marcar valores bajo el</label>
+          <select id="umbral">
+            <option value="0.25">25 % del promedio</option>
+            <option value="0.5" selected>50 % del promedio</option>
+            <option value="0.75">75 % del promedio</option>
+          </select>
+        </div>
+        <div class="acciones">
+          <button type="submit">Comparar precios</button>
+          <button type="button" id="b-limpiar-ncm" class="btn-secundario">Limpiar</button>
+        </div>
       </form>
       <div id="r-ncm"></div>
     </section>
 
     <section id="p-importadores" class="panel" hidden>
       <form id="f-importadores" class="buscador">
-        <label for="q">Nombre del importador</label>
-        <input id="q" placeholder="Al menos 3 letras" autocomplete="off">
-        <button type="submit">Buscar importador</button>
+        <div class="campo-busqueda">
+          <label for="q">Nombre del importador</label>
+          <input type="text" id="q" placeholder="Al menos 3 letras" style="width: 18rem;" autocomplete="off">
+        </div>
+        <div class="acciones">
+          <button type="submit">Buscar importador</button>
+          <button type="button" id="b-limpiar-importadores" class="btn-secundario">Limpiar</button>
+        </div>
       </form>
       <div id="r-importadores"></div>
     </section>
@@ -98,11 +119,27 @@
 
   <dialog id="login">
     <form id="f-login">
-      <h2>Iniciar sesión</h2>
-      <label>Usuario <input id="l-usuario" autocomplete="username" required></label>
-      <label>Clave <input id="l-clave" type="password" autocomplete="current-password" required></label>
+      <div class="login-header">
+        <h2>SISTEMA COMEX</h2>
+        <p class="subtitulo">CONSULTA Y ANÁLISIS</p>
+      </div>
+
+      <label for="l-usuario">Usuario
+        <input id="l-usuario" autocomplete="username" required>
+      </label>
+
+      <label for="l-clave">Contraseña
+        <input id="l-clave" type="password" autocomplete="current-password" required>
+      </label>
+
       <p class="mensaje error" id="l-error" hidden></p>
-      <button type="submit">Ingresar</button>
+
+      <button type="submit">Iniciar sesión</button>
+
+      <div class="login-footer">
+        <span class="desarrollado-por">Desarrollado por</span>
+        <img src="img/logo-mocosoft.png" alt="Mocosoft" class="brand-footer-img">
+      </div>
     </form>
   </dialog>
 
