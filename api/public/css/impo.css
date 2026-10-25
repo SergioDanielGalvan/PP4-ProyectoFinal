@@ -362,6 +362,25 @@ tr.clic { cursor: pointer; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Dentro de un input-group de Bootstrap el campo queda envuelto en .ac:
+   la envoltura ocupa el lugar del campo y conserva las esquinas unidas */
+.input-group > .ac {
+  flex: 1 1 auto;
+  width: 1%;
+  min-width: 0;
+}
+.input-group > .ac > .form-control {
+  width: 100%;
+}
+.input-group > .ac:not(:first-child) > .form-control {
+  margin-left: calc(-1 * var(--bs-border-width, 1px));
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.input-group > .ac:not(:last-child) > .form-control {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
 @media print {
   .ac-lista { display: none !important; }
 }
