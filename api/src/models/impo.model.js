@@ -297,21 +297,41 @@ async function buscarImportadores(texto, periodo) {
 }
 
 // Origen del ítem distinto de la procedencia del embarque
-async function triangulaciones(periodo, limite) {
+// Columnas por las que se puede ordenar: nombre en la API -> expresión SQL
+const ORDEN_TRIANGULACIONES = {
+  ncm: 'ncm', origen: 'pais_origen_desc', procedencia: 'pais_procedencia_desc', items: 'items', fob: 'fob_usd',
+};
+
+// Ítems cuyo origen difiere de su procedencia. Se usa la procedencia del ítem
+// (item.PaisProcedencia), que es la que trae cada línea del archivo de ARCA.
+// Filtros opcionales: partida, subpartida o NCM (4, 6 u 8 dígitos), país de
+// origen y país de procedencia. Orden por cualquier columna, ASC o DESC.
+async function triangulaciones({ periodo, ncm, origen, procedencia, orden, dir, limite }) {
   const params = [];
+  let where = filtroPeriodo('i', periodo, params);
+  if (ncm) {
+    const pos = await posicionesDe(ncm);
+    if (!pos) return [];
+    where += ' AND i.IdPosicion IN (?)';
+    params.push(pos.ids);
+  }
+  if (origen) { where += ' AND i.PaisOrigen = ?'; params.push(origen); }
+  if (procedencia) { where += ' AND i.PaisProcedencia = ?'; params.push(procedencia); }
+  const columna = ORDEN_TRIANGULACIONES[orden] || 'fob_usd';
+  const sentido = dir === 'asc' ? 'ASC' : 'DESC';
+
   const [rows] = await pool.query(`
     SELECT n.PosicionSIM AS ncm, i.PaisOrigen AS pais_origen, po.Descrip AS pais_origen_desc,
-           c.PaisProcedencia AS pais_procedencia, pp.Descrip AS pais_procedencia_desc,
+           i.PaisProcedencia AS pais_procedencia, pp.Descrip AS pais_procedencia_desc,
            COUNT(*)      AS items,
            SUM(i.FobTotalDolares) AS fob_usd
     FROM item i
-    JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
     JOIN posicion n ON n.IdPosicion = i.IdPosicion
     LEFT JOIN paises po ON po.Codigo = i.PaisOrigen
-    LEFT JOIN paises pp ON pp.Codigo = c.PaisProcedencia
-    WHERE i.PaisOrigen <> c.PaisProcedencia${filtroPeriodo('i', periodo, params)}
-    GROUP BY n.PosicionSIM, i.PaisOrigen, po.Descrip, c.PaisProcedencia, pp.Descrip
-    ORDER BY fob_usd DESC
+    LEFT JOIN paises pp ON pp.Codigo = i.PaisProcedencia
+    WHERE i.PaisOrigen <> i.PaisProcedencia${where}
+    GROUP BY n.PosicionSIM, i.PaisOrigen, po.Descrip, i.PaisProcedencia, pp.Descrip
+    ORDER BY ${columna} ${sentido}, fob_usd DESC
     LIMIT ?`, [...params, limite]);
   return rows;
 }

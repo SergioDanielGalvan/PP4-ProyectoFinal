@@ -317,6 +317,24 @@ tr.clic { cursor: pointer; }
     text-decoration: none !important;
   }
 }
+/* ---------- encabezados que ordenan ---------- */
+th button.orden {
+  all: unset;
+  cursor: pointer;
+  white-space: nowrap;
+}
+th button.orden:hover,
+th button.orden.activa {
+  color: var(--sello);
+}
+th button.orden:focus-visible {
+  outline: 2px solid var(--sello);
+  outline-offset: 2px;
+}
+@media print {
+  th button.orden { color: inherit; }
+}
+
 /* ---------- autocompletado ---------- */
 .ac {
   position: relative;

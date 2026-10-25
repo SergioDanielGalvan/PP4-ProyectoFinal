@@ -275,6 +275,30 @@
           <i class="bi bi-info-circle-fill fs-5"></i>
           <div>Operaciones aduaneras cuyo <strong>país de origen</strong> es distinto al <strong>país de procedencia</strong> del embarque.</div>
         </div>
+        <div class="card card-filtro mb-4">
+          <div class="card-body">
+            <form id="f-tri" class="buscador">
+              <div class="row g-2 align-items-end">
+                <div class="col-sm-6 col-md-3">
+                  <label for="tr-ncm" class="form-label small fw-semibold text-secondary">Partida, subpartida o NCM</label>
+                  <input type="text" id="tr-ncm" class="form-control font-monospace" placeholder="Todas" title="Partida (4 dígitos), subpartida (6) o NCM (8)" autocomplete="off">
+                </div>
+                <div class="col-sm-6 col-md-3">
+                  <label for="tr-origen" class="form-label small fw-semibold text-secondary">País de origen</label>
+                  <select id="tr-origen" class="form-select"><option value="">Todos</option></select>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                  <label for="tr-proc" class="form-label small fw-semibold text-secondary">País de procedencia</label>
+                  <select id="tr-proc" class="form-select"><option value="">Todos</option></select>
+                </div>
+                <div class="col-sm-6 col-md-3 d-flex gap-2">
+                  <button type="submit" class="btn btn-primary">Buscar</button>
+                  <button type="button" id="b-limpiar-tri" class="btn btn-outline-secondary">Limpiar</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
         <div id="r-triangulaciones"></div>
       </section>
 

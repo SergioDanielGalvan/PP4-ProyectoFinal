@@ -420,11 +420,19 @@ $('#r-subpartidas').addEventListener('click', (e) => {
 // ---------- precios por NCM ----------
 // Filtros: región y país de procedencia, aduana y rango de períodos. Las
 // listas se piden una vez, al abrir la pestaña.
+// Regiones, países y aduanas: se piden una sola vez y los usan varias pestañas
+let pedidoCatalogos = null;
+function obtenerCatalogos() {
+  if (!pedidoCatalogos) pedidoCatalogos = api('/catalogos').catch((err) => { pedidoCatalogos = null; throw err; });
+  return pedidoCatalogos;
+}
+const opcionesDe = (lista, texto) => lista.map((x) => `<option value="${esc(x.codigo)}">${esc(texto(x))}</option>`).join('');
+
 let catalogosCargados = null;
 function cargarFiltrosNcm() {
   if (catalogosCargados) return catalogosCargados;
-  catalogosCargados = api('/catalogos').then((c) => {
-    const opciones = (lista, texto) => lista.map((x) => `<option value="${esc(x.codigo)}">${esc(texto(x))}</option>`).join('');
+  catalogosCargados = obtenerCatalogos().then((c) => {
+    const opciones = opcionesDe;
     $('#fn-region').insertAdjacentHTML('beforeend', opciones(c.regiones, (r) => r.nombre));
     $('#fn-aduana').insertAdjacentHTML('beforeend', opciones(c.aduanas, (a) => `${a.descrip} (${a.codigo})`));
     const paises = c.paises;
@@ -750,14 +758,42 @@ $('#b-limpiar-importadores').addEventListener('click', () => {
 });
 
 // ---------- triangulaciones ----------
+// Filtros (NCM, origen, procedencia) y orden por columna. El orden lo hace
+// la API: se muestran las primeras filas según la columna elegida.
+const triEstado = { orden: 'fob', dir: 'desc', limite: 50 };
+const TRI_COLUMNAS = [
+  { orden: 'ncm', titulo: 'NCM' }, { orden: 'origen', titulo: 'Origen' }, { orden: 'procedencia', titulo: 'Procedencia' },
+  { orden: 'items', titulo: 'Ítems', n: true }, { orden: 'fob', titulo: 'FOB', n: true },
+];
+
+let paisesTriCargados = null;
+function cargarFiltrosTri() {
+  if (!paisesTriCargados) {
+    paisesTriCargados = obtenerCatalogos().then((c) => {
+      const lista = opcionesDe(c.paises, (p) => `${p.descrip} (${p.codigo})`);
+      $('#tr-origen').insertAdjacentHTML('beforeend', lista);
+      $('#tr-proc').insertAdjacentHTML('beforeend', lista);
+    }).catch(() => { paisesTriCargados = null; });
+  }
+  return paisesTriCargados;
+}
+
 async function cargarTriangulaciones() {
   const destino = $('#r-triangulaciones');
+  cargarFiltrosTri();
+  const ncmTri = $('#tr-ncm').value.trim();
+  if (ncmTri && !/^(\d{4}|\d{6}|\d{8})$/.test(ncmTri.replace(/\./g, ''))) {
+    return mensaje(destino, 'La NCM va por partida completa (4 dígitos), subpartida (6) o NCM (8), o vacía para todas.', true);
+  }
   mensaje(destino, 'Cargando triangulaciones...', false);
 
   try {
-    const rows = await api('/triangulaciones', { periodo: periodo() });
+    const rows = await api('/triangulaciones', {
+      periodo: periodo(), ncm: ncmTri, origen: $('#tr-origen').value, procedencia: $('#tr-proc').value,
+      orden: triEstado.orden, dir: triEstado.dir, limite: triEstado.limite,
+    });
     if (!rows || rows.length === 0) {
-      return mensaje(destino, 'No hay triangulaciones en el periodo elegido.');
+      return mensaje(destino, 'No hay triangulaciones con esos filtros en el periodo elegido.');
     }
 
     const totalItems = rows.reduce((s, r) => s + (Number(r.items) || 0), 0);
@@ -790,14 +826,21 @@ async function cargarTriangulaciones() {
         <h2 style="margin: 0 0 0.25rem 0;">Consulta de Triangulaciones</h2>
         <p style="margin: 0; color: #555; font-size: 0.9rem;">
           <strong>Criterio:</strong> Origen distinto a procedencia · 
-          <strong>Período:</strong> ${periodo() ? mes(periodo()) : 'Todos'}
+          <strong>Período:</strong> ${periodo() ? mes(periodo()) : 'Todos'}${textoFiltrosTri() ? ` · ${esc(textoFiltrosTri())}` : ''}
         </p>
       </div>`;
 
-    destino.innerHTML = barraAcciones + encabezadoReporte + tabla([
-      { titulo: 'NCM' }, { titulo: 'Origen' }, { titulo: 'Procedencia' },
-      { titulo: 'Ítems', n: true }, { titulo: 'FOB', n: true },
-    ], filas);
+    // Encabezados con orden: clic = ordena por esa columna; otro clic invierte
+    const columnas = TRI_COLUMNAS.map((c) => {
+      const activa = c.orden === triEstado.orden;
+      const flecha = activa ? (triEstado.dir === 'asc' ? ' ▲' : ' ▼') : '';
+      const sentido = activa ? (triEstado.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+      return { n: c.n, titulo: `<button type="button" class="orden${activa ? ' activa' : ''}" data-orden="${c.orden}" aria-sort="${sentido}" title="Ordenar por ${c.titulo}">${c.titulo}${flecha}</button>` };
+    });
+    const aviso = rows.length >= triEstado.limite
+      ? `<p class="nota">Se muestran las primeras ${num(triEstado.limite)} combinaciones según el orden elegido. Usá los filtros para acotar.</p>` : '';
+
+    destino.innerHTML = barraAcciones + encabezadoReporte + tabla(columnas, filas) + aviso;
 
     // Evento Imprimir / PDF
     const btnTriPdf = document.getElementById('b-triangulaciones-pdf');
@@ -823,6 +866,8 @@ async function cargarTriangulaciones() {
           ['SISTEMA COMEX - CONSULTA DE TRIANGULACIONES'],
           ['Periodo', periodo() ? mes(periodo()) : 'Todos'],
           ['Criterio', 'Origen distinto de procedencia'],
+          ['Filtros', textoFiltrosTri() || 'Ninguno'],
+          ['Orden', `${TRI_COLUMNAS.find((c) => c.orden === triEstado.orden).titulo} ${triEstado.dir === 'asc' ? 'ascendente' : 'descendente'}`],
           [],
           ['NCM', 'Pais Origen', 'Codigo Origen', 'Pais Procedencia', 'Codigo Procedencia', 'Items', 'FOB USD']
         ];
@@ -860,6 +905,34 @@ async function cargarTriangulaciones() {
     mensaje(destino, err.message, true);
   }
 }
+
+function textoFiltrosTri() {
+  const sel = (id) => ($(id).value ? $(id).selectedOptions[0].textContent : '');
+  return [
+    $('#tr-ncm').value.trim() && `NCM ${$('#tr-ncm').value.trim()}`,
+    sel('#tr-origen') && `Origen ${sel('#tr-origen')}`,
+    sel('#tr-proc') && `Procedencia ${sel('#tr-proc')}`,
+  ].filter(Boolean).join(' · ');
+}
+
+$('#f-tri').addEventListener('submit', (e) => { e.preventDefault(); cargarTriangulaciones(); });
+$('#b-limpiar-tri').addEventListener('click', () => {
+  $('#tr-ncm').value = '';
+  $('#tr-origen').value = '';
+  $('#tr-proc').value = '';
+  Object.assign(triEstado, { orden: 'fob', dir: 'desc' });
+  cargarTriangulaciones();
+});
+
+// Clic en un encabezado: ordena; los textos empiezan A-Z y los números de mayor a menor
+$('#r-triangulaciones').addEventListener('click', (e) => {
+  const boton = e.target.closest('button[data-orden]');
+  if (!boton) return;
+  const orden = boton.dataset.orden;
+  if (orden === triEstado.orden) triEstado.dir = triEstado.dir === 'asc' ? 'desc' : 'asc';
+  else Object.assign(triEstado, { orden, dir: ['items', 'fob'].includes(orden) ? 'desc' : 'asc' });
+  cargarTriangulaciones();
+});
 
 // Clic en NCM dentro de triangulaciones para ir a Precios por NCM
 $('#r-triangulaciones').addEventListener('click', (e) => {
@@ -1229,4 +1302,5 @@ const buscarNcm = async (t) => (await api('/sugerencias/ncm', { q: t }))
   .map((n) => ({ valor: n.ncm, detalle: corto(n.descripcion, 80) }));
 autocompletar($('#ncm'), { minimo: minimoNcm, buscar: buscarNcm, alElegir: () => $('#f-ncm').requestSubmit() });
 autocompletar($('#desde'), { minimo: minimoNcm, buscar: buscarNcm });
+autocompletar($('#tr-ncm'), { minimo: minimoNcm, buscar: buscarNcm, alElegir: () => $('#f-tri').requestSubmit() });
 autocompletar($('#hasta'), { minimo: minimoNcm, buscar: buscarNcm });

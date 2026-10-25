@@ -154,10 +154,25 @@ const buscarImportadores = handler(async (req, res) => {
 });
 
 const triangulaciones = handler(async (req, res) => {
-  res.json(await model.triangulaciones(
-    periodoOpcional(req.query.periodo),
-    entero(req.query.limite, 50, 1, 200),
-  ));
+  const q = req.query;
+  const pais = (v, nombre) => {
+    if (v === undefined || v === '') return null;
+    if (!/^\d{3}$/.test(v)) throw new HttpError(400, `${nombre} es un código de país de 3 dígitos, por ejemplo 310.`);
+    return v;
+  };
+  const orden = q.orden || 'fob';
+  if (!['ncm', 'origen', 'procedencia', 'items', 'fob'].includes(orden)) {
+    throw new HttpError(400, 'orden va ncm, origen, procedencia, items o fob.');
+  }
+  res.json(await model.triangulaciones({
+    periodo: periodoOpcional(q.periodo),
+    ncm: q.ncm ? ncmNormalizada(q.ncm) : null,
+    origen: pais(q.origen, 'origen'),
+    procedencia: pais(q.procedencia, 'procedencia'),
+    orden,
+    dir: q.dir === 'asc' ? 'asc' : 'desc',
+    limite: entero(q.limite, 50, 1, 500),
+  }));
 });
 
 const catalogos = handler(async (req, res) => {
