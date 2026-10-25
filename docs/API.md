@@ -62,8 +62,13 @@ administración y el SQL libre exigen token de admin **siempre**.
 | `GET /impo/ncm/:ncm/valores-bajos` | `periodo`, `umbral`, `limite` | ítems bajo el umbral |
 | `GET /impo/importadores` | `q`, `periodo` | despachos, ítems y FOB por importador |
 | `GET /impo/triangulaciones` | `periodo`, `limite` | origen distinto de procedencia |
+| `GET /impo/sugerencias/despachos` | `prefijo` (5 a 16 caracteres: año y aduana como mínimo), `periodo`, `limite` (15) | `[{ nro_despacho, periodo, importador }]` |
+| `GET /impo/sugerencias/ncm` | `q`: 2 a 8 dígitos con o sin puntos (`847130`, `8471.30`) o 3 letras de la descripción; `limite` (15) | `[{ ncm, descripcion }]` (descripción cortada a 120 caracteres) |
+| `GET /impo/sugerencias/importadores` | `q` (3 letras o más), `limite` (15) | `[{ nombre }]`, primero los que empiezan con el texto |
 
 `periodo` es AAAAMM (`202608`). Montos en US$ FOB.
+
+Las rutas `/sugerencias/*` son para autocompletar mientras se escribe: respuestas cortas, con límite, sobre índices. En la página, `autocompletar()` (al final de `impo.js`) espera 250 ms después de la última tecla antes de pedir.
 
 Respuesta de `/impo/matriz` (para gráficos):
 

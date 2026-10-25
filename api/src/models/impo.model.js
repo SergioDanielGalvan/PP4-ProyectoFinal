@@ -330,6 +330,50 @@ async function matriz({ nivel, seccion, grupos }) {
   };
 }
 
+// ---------- sugerencias para el autocompletado ----------
+// Consultas chicas y con LIMIT: se llaman mientras el usuario escribe.
+
+// Despachos que empiezan con el prefijo. Usa el índice ux_nroaduana
+// (NroAduana, Periodo): es un rango sobre el índice, no recorre la tabla.
+async function sugerirDespachos(prefijo, periodo, limite) {
+  const params = [`${prefijo}%`];
+  const filtro = filtroPeriodo('c', periodo, params);
+  const [rows] = await pool.query(`
+    SELECT c.NroAduana AS nro_despacho, c.Periodo AS periodo, imp.Nombre AS importador
+    FROM caratula c
+    JOIN importadores imp ON imp.IdImportador = c.IdImportador
+    WHERE c.NroAduana LIKE ?${filtro}
+    ORDER BY c.NroAduana, c.Periodo
+    LIMIT ?`, [...params, limite]);
+  return rows;
+}
+
+// Posiciones NCM del KIT por código (prefijo, sobre el índice único de
+// PosicionSIM) o por texto de la descripción.
+async function sugerirNcm({ prefijo, texto, limite }) {
+  const [rows] = prefijo
+    ? await pool.query(`
+        SELECT PosicionSIM AS ncm, DescripcionNCM AS descripcion
+        FROM posicion WHERE PosicionSIM LIKE ?
+        ORDER BY PosicionSIM LIMIT ?`, [`${prefijo}%`, limite])
+    : await pool.query(`
+        SELECT PosicionSIM AS ncm, DescripcionNCM AS descripcion
+        FROM posicion WHERE DescripcionNCM LIKE ?
+        ORDER BY PosicionSIM LIMIT ?`, [`%${texto}%`, limite]);
+  return rows.map((r) => ({ ...r, descripcion: (r.descripcion || '').slice(0, 120) }));
+}
+
+// Nombres de importadores: primero los que empiezan con el texto.
+async function sugerirImportadores(texto, limite) {
+  const [rows] = await pool.query(`
+    SELECT Nombre AS nombre
+    FROM importadores
+    WHERE Nombre LIKE ?
+    ORDER BY (Nombre LIKE ?) DESC, Nombre
+    LIMIT ?`, [`%${texto}%`, `${texto}%`, limite]);
+  return rows;
+}
+
 module.exports = {
   matriz,
   listarPeriodos,
@@ -340,4 +384,7 @@ module.exports = {
   valoresBajos,
   buscarImportadores,
   triangulaciones,
+  sugerirDespachos,
+  sugerirNcm,
+  sugerirImportadores,
 };
