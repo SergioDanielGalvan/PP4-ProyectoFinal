@@ -48,6 +48,31 @@ function rangoNcm(desde, hasta) {
   return r;
 }
 
+// Filtros de Precios: período o rango de períodos, región (primer dígito del
+// país), países de procedencia y aduanas (listas separadas por coma)
+function listaCodigos(valor, nombre) {
+  if (valor === undefined || valor === '') return [];
+  const lista = String(valor).split(',').map((v) => v.trim()).filter(Boolean);
+  if (lista.length > 30 || lista.some((v) => !/^\d{3}$/.test(v))) {
+    throw new HttpError(400, `${nombre} es una lista de códigos de 3 dígitos separados por coma (hasta 30).`);
+  }
+  return lista;
+}
+
+function filtrosPrecios(q) {
+  const desde = periodoOpcional(q.desde);
+  const hasta = periodoOpcional(q.hasta);
+  if (desde && hasta && desde > hasta) throw new HttpError(400, '"desde" tiene que ser anterior o igual a "hasta".');
+  const region = q.region === undefined || q.region === '' ? null : String(q.region);
+  if (region !== null && !/^[1-9]$/.test(region)) throw new HttpError(400, 'La región es el primer dígito del país: 1 África, 2 América, 3 Asia, 4 Europa, 5 Oceanía.');
+  return {
+    periodo: periodoOpcional(q.periodo),
+    desde, hasta, region,
+    paises: listaCodigos(q.paises, 'paises'),
+    aduanas: listaCodigos(q.aduanas, 'aduanas'),
+  };
+}
+
 // Envuelve los handlers async para que los errores lleguen a errorHandler
 const handler = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
@@ -104,7 +129,7 @@ const listarDespachos = handler(async (req, res) => {
 
 const preciosPorNcm = handler(async (req, res) => {
   const ncm = ncmNormalizada(req.params.ncm);
-  const resultado = await model.preciosPorNcm(ncm, periodoOpcional(req.query.periodo));
+  const resultado = await model.preciosPorNcm(ncm, filtrosPrecios(req.query));
   if (!resultado) throw new HttpError(404, `La posición ${req.params.ncm} no existe en el KIT o no tiene importaciones cargadas.`);
   res.json(resultado);
 });
@@ -114,7 +139,7 @@ const valoresBajos = handler(async (req, res) => {
   const umbral = req.query.umbral === undefined ? 0.5 : Number(req.query.umbral);
   if (!(umbral > 0 && umbral < 1)) throw new HttpError(400, 'El umbral va entre 0 y 1; 0.5 marca ítems a menos de la mitad del promedio.');
   const resultado = await model.valoresBajos(ncm, {
-    periodo: periodoOpcional(req.query.periodo),
+    filtros: filtrosPrecios(req.query),
     umbral,
     limite: entero(req.query.limite, 50, 1, 200),
   });
@@ -133,6 +158,10 @@ const triangulaciones = handler(async (req, res) => {
     periodoOpcional(req.query.periodo),
     entero(req.query.limite, 50, 1, 200),
   ));
+});
+
+const catalogos = handler(async (req, res) => {
+  res.json(await model.catalogos());
 });
 
 // ---------- sugerencias (autocompletado) ----------
@@ -179,6 +208,7 @@ module.exports = {
   valoresBajos,
   buscarImportadores,
   triangulaciones,
+  catalogos,
   sugerirDespachos,
   sugerirNcm,
   sugerirImportadores,

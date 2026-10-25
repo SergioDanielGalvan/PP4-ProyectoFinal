@@ -4,6 +4,7 @@ const ctrl = require('../controllers/impo.controller');
 const router = Router();
 
 router.get('/periodos', ctrl.periodos);
+router.get('/catalogos', ctrl.catalogos);   // regiones, países y aduanas para los filtros
 router.get('/matriz', ctrl.matriz);
 router.get('/despachos', ctrl.listarDespachos);
 router.get('/despachos/:nro', ctrl.obtenerDespacho);

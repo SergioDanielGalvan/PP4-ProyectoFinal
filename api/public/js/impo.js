@@ -418,6 +418,56 @@ $('#r-subpartidas').addEventListener('click', (e) => {
 
 
 // ---------- precios por NCM ----------
+// Filtros: región y país de procedencia, aduana y rango de períodos. Las
+// listas se piden una vez, al abrir la pestaña.
+let catalogosCargados = null;
+function cargarFiltrosNcm() {
+  if (catalogosCargados) return catalogosCargados;
+  catalogosCargados = api('/catalogos').then((c) => {
+    const opciones = (lista, texto) => lista.map((x) => `<option value="${esc(x.codigo)}">${esc(texto(x))}</option>`).join('');
+    $('#fn-region').insertAdjacentHTML('beforeend', opciones(c.regiones, (r) => r.nombre));
+    $('#fn-aduana').insertAdjacentHTML('beforeend', opciones(c.aduanas, (a) => `${a.descrip} (${a.codigo})`));
+    const paises = c.paises;
+    const llenarPaises = () => {
+      const region = $('#fn-region').value;
+      const elegido = $('#fn-pais').value;
+      $('#fn-pais').innerHTML = '<option value="">Todos</option>'
+        + opciones(paises.filter((p) => !region || p.codigo.startsWith(region)), (p) => `${p.descrip} (${p.codigo})`);
+      if ([...$('#fn-pais').options].some((o) => o.value === elegido)) $('#fn-pais').value = elegido;
+    };
+    llenarPaises();
+    $('#fn-region').addEventListener('change', llenarPaises);
+    // Los períodos son los mismos del selector de arriba
+    const meses = [...$('#periodo').options].filter((o) => o.value).map((o) => `<option value="${o.value}">${mes(o.value)}</option>`).join('');
+    $('#fn-desde').insertAdjacentHTML('beforeend', meses);
+    $('#fn-hasta').insertAdjacentHTML('beforeend', meses);
+  }).catch(() => { catalogosCargados = null; });
+  return catalogosCargados;
+}
+document.querySelector('[data-panel="p-ncm"]').addEventListener('click', cargarFiltrosNcm);
+
+function filtrosNcm() {
+  return {
+    region: $('#fn-region').value,
+    paises: $('#fn-pais').value,
+    aduanas: $('#fn-aduana').value,
+    desde: $('#fn-desde').value,
+    hasta: $('#fn-hasta').value,
+  };
+}
+
+// Texto con los filtros aplicados, para la pantalla y el CSV
+function textoFiltrosNcm() {
+  const f = filtrosNcm();
+  const sel = (id) => $(id).selectedOptions[0]?.textContent || '';
+  const partes = [];
+  if (f.desde || f.hasta) partes.push(`Períodos ${f.desde ? mes(f.desde) : 'inicio'} a ${f.hasta ? mes(f.hasta) : 'último'}`);
+  else partes.push(`Período ${periodo() ? mes(periodo()) : 'todos'}`);
+  if (f.paises) partes.push(`Procedencia ${sel('#fn-pais')}`);
+  else if (f.region) partes.push(`Procedencia ${sel('#fn-region')}`);
+  if (f.aduanas) partes.push(`Aduana ${sel('#fn-aduana')}`);
+  return partes.join(' · ');
+}
 $('#f-ncm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const destino = $('#r-ncm');
@@ -428,8 +478,8 @@ $('#f-ncm').addEventListener('submit', async (e) => {
   }
   try {
     const [precios, bajos] = await Promise.all([
-      api(`/ncm/${encodeURIComponent(ncm)}/precios`, { periodo: periodo() }),
-      api(`/ncm/${encodeURIComponent(ncm)}/valores-bajos`, { periodo: periodo(), umbral: $('#umbral').value }),
+      api(`/ncm/${encodeURIComponent(ncm)}/precios`, { periodo: periodo(), ...filtrosNcm() }),
+      api(`/ncm/${encodeURIComponent(ncm)}/valores-bajos`, { periodo: periodo(), ...filtrosNcm(), umbral: $('#umbral').value }),
     ]);
 
     // En partida o subpartida se suman varias NCM: se muestra cuántas y la NCM de cada alerta
@@ -455,6 +505,8 @@ $('#f-ncm').addEventListener('submit', async (e) => {
         ${agrupa ? `<td class="codigo">${esc(b.ncm)}</td>` : ''}
         <td>${esc(b.importador)}</td>
         <td class="codigo">${esc(b.pais_origen)}</td>
+        <td class="codigo">${esc(b.pais_procedencia)}</td>
+        <td class="codigo">${esc(b.aduana)}</td>
         <td class="n">${num(b.cantidad)}</td>
         <td class="n">${usd(b.valor_unitario)}</td>
         <td class="n">${usd(b.vu_promedio)}</td>
@@ -470,9 +522,10 @@ $('#f-ncm').addEventListener('submit', async (e) => {
     destino.innerHTML = barraAcciones + `
       <h2>${NOMBRE_NIVEL[precios.nivel] || 'NCM'} ${esc(precios.ncm)}</h2>
       <p class="nota">${esc(corto(precios.descripcion, 300) || 'Sin descripción en el KIT.')}</p>
+      <p class="nota"><strong>Filtros:</strong> ${esc(textoFiltrosNcm())}</p>
       ${agrupa ? '<p class="nota">El promedio por origen junta todas las NCM de la ' + (precios.nivel === 'partida' ? 'partida' : 'subpartida')
         + ' con la misma unidad: si son mercaderías distintas, sirve como orientación. Las alertas de abajo comparan cada ítem con el promedio de su propia NCM.</p>' : ''}
-      ${tabla([
+      ${precios.origenes.length === 0 ? '<p class="mensaje">No hay importaciones con esos filtros.</p>' : tabla([
         { titulo: 'Origen' }, { titulo: 'Unidad' }, ...(agrupa ? [{ titulo: 'NCM distintas', n: true }] : []),
         { titulo: 'Ítems', n: true }, { titulo: 'Cantidad', n: true },
         { titulo: 'Mínimo', n: true }, { titulo: 'Promedio', n: true }, { titulo: 'Máximo', n: true },
@@ -481,6 +534,7 @@ $('#f-ncm').addEventListener('submit', async (e) => {
       <h2>Valores unitarios por debajo del ${num(bajos.umbral * 100)} % del promedio</h2>
       ${filasBajos.length ? tabla([
         { titulo: 'Despacho' }, ...(agrupa ? [{ titulo: 'NCM' }] : []), { titulo: 'Importador' }, { titulo: 'Origen' },
+        { titulo: 'Proced.' }, { titulo: 'Aduana' },
         { titulo: 'Cantidad', n: true }, { titulo: 'Declarado', n: true }, { titulo: 'Promedio NCM', n: true },
         { titulo: 'Proporción', n: true },
       ], filasBajos) : '<p class="mensaje">Ningún ítem queda por debajo de ese umbral.</p>'}`;
@@ -509,7 +563,7 @@ $('#f-ncm').addEventListener('submit', async (e) => {
           ['SISTEMA COMEX - PRECIOS POR POSICION NCM'],
           [NOMBRE_NIVEL[precios.nivel] || 'NCM', precios.ncm],
           ['Descripcion', precios.descripcion || ''],
-          ['Periodo', periodo() ? mes(periodo()) : 'Todos'],
+          ['Filtros', textoFiltrosNcm()],
           [],
           ['RESUMEN POR ORIGEN'],
           ['Origen', 'Codigo Pais', 'Unidad', ...(agrupa ? ['NCM distintas'] : []), 'Items', 'Cantidad', 'VU Minimo USD', 'VU Promedio USD', 'VU Maximo USD', 'FOB USD']
@@ -533,13 +587,15 @@ $('#f-ncm').addEventListener('submit', async (e) => {
         if (bajos.items && bajos.items.length) {
           lineas.push([]);
           lineas.push([`VALORES POR DEBAJO DEL ${num(bajos.umbral * 100)}% DEL PROMEDIO`]);
-          lineas.push(['Despacho', ...(agrupa ? ['NCM'] : []), 'Importador', 'Origen', 'Cantidad', 'Declarado USD', 'Promedio NCM USD', 'Proporcion']);
+          lineas.push(['Despacho', ...(agrupa ? ['NCM'] : []), 'Importador', 'Origen', 'Procedencia', 'Aduana', 'Cantidad', 'Declarado USD', 'Promedio NCM USD', 'Proporcion']);
           bajos.items.forEach((b) => {
             lineas.push([
               b.nro_despacho,
               ...(agrupa ? [b.ncm] : []),
               b.importador,
               b.pais_origen,
+              b.pais_procedencia,
+              b.aduana,
               importe(b.cantidad),
               importe(b.valor_unitario),
               importe(b.vu_promedio),
@@ -569,6 +625,9 @@ $('#f-ncm').addEventListener('submit', async (e) => {
 
 $('#b-limpiar-ncm').addEventListener('click', () => {
   $('#ncm').value = '';
+  ['#fn-region', '#fn-aduana', '#fn-desde', '#fn-hasta'].forEach((s) => { $(s).value = ''; });
+  $('#fn-region').dispatchEvent(new Event('change'));
+  $('#fn-pais').value = '';
   $('#r-ncm').innerHTML = '';
   $('#ncm').focus();
 });

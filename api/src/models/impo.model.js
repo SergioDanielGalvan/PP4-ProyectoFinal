@@ -173,14 +173,53 @@ async function posicionesDe(digitos) {
   return { codigo: prefijo, nivel: NIVELES[digitos.length], descripcion, ids: rows.map((r) => r.id) };
 }
 
+// ---------- filtros de Precios ----------
+// Regiones = primer dígito del código de país del KIT de ARCA.
+const REGIONES = [
+  { codigo: '1', nombre: 'África' }, { codigo: '2', nombre: 'América' }, { codigo: '3', nombre: 'Asia' },
+  { codigo: '4', nombre: 'Europa' }, { codigo: '5', nombre: 'Oceanía' }, { codigo: '7', nombre: 'Varios países' },
+  { codigo: '9', nombre: 'Indeterminado' },
+];
+
+// Período: un mes (periodo) o un rango (desde/hasta, AAAAMM). El rango manda.
+function filtroPeriodos(alias, f, params) {
+  if (f.desde || f.hasta) {
+    params.push(f.desde || 0, f.hasta || 999999);
+    return ` AND ${alias}.Periodo BETWEEN ? AND ?`;
+  }
+  return filtroPeriodo(alias, f.periodo ?? null, params);
+}
+
+// Región y países de procedencia (del ítem) y aduanas de oficialización (de la carátula)
+function filtroProcedenciaAduana(aliasItem, aliasCaratula, f, params) {
+  let sql = '';
+  if (f.region) { sql += ` AND ${aliasItem}.PaisProcedencia LIKE ?`; params.push(`${f.region}%`); }
+  if (f.paises?.length) { sql += ` AND ${aliasItem}.PaisProcedencia IN (?)`; params.push(f.paises); }
+  if (f.aduanas?.length) { sql += ` AND ${aliasCaratula}.AduanaOficializacion IN (?)`; params.push(f.aduanas); }
+  return sql;
+}
+
+// Listas para los selectores del front; cambian sólo con el KIT
+let cacheCatalogos = null;
+async function catalogos() {
+  if (cacheCatalogos && Date.now() - cacheCatalogos.hora < 60 * 60 * 1000) return cacheCatalogos.datos;
+  const [paises] = await pool.query(
+    "SELECT Codigo AS codigo, Descrip AS descrip FROM paises WHERE Codigo REGEXP '^[1-9][0-9]{2}$' ORDER BY Descrip");
+  const [aduanas] = await pool.query('SELECT Codigo AS codigo, Descrip AS descrip FROM aduanas ORDER BY Descrip');
+  const datos = { regiones: REGIONES, paises, aduanas };
+  cacheCatalogos = { hora: Date.now(), datos };
+  return datos;
+}
+
 // Precios por país de origen y unidad: base para comparar valores declarados.
 // En partida o subpartida se suman varias NCM: "posiciones" dice cuántas
 // distintas entran en cada fila (el promedio mezcla mercaderías distintas).
-async function preciosPorNcm(digitos, periodo) {
+async function preciosPorNcm(digitos, filtros) {
   const pos = await posicionesDe(digitos);
   if (!pos) return null;
 
   const params = [pos.ids];
+  const where = filtroPeriodos('i', filtros, params) + filtroProcedenciaAduana('i', 'c', filtros, params);
   const [rows] = await pool.query(`
     SELECT i.PaisOrigen AS pais_origen, p.Descrip AS pais_origen_desc, i.UnidadMedida AS unidad,
            COUNT(DISTINCT i.IdPosicion) AS posiciones,
@@ -191,26 +230,28 @@ async function preciosPorNcm(digitos, periodo) {
            MAX(i.ValorUnitario)    AS vu_max,
            ROUND(SUM(i.FobTotalDolares) / NULLIF(SUM(i.CantidadUnidades), 0), 6) AS vu_promedio
     FROM item i
+    ${filtros.aduanas?.length ? 'JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo' : ''}
     LEFT JOIN paises p ON p.Codigo = i.PaisOrigen
-    WHERE i.IdPosicion IN (?)${filtroPeriodo('i', periodo, params)}
+    WHERE i.IdPosicion IN (?)${where}
     GROUP BY i.PaisOrigen, p.Descrip, i.UnidadMedida
     ORDER BY fob_usd DESC`, params);
-  if (rows.length === 0 && pos.nivel !== 'ncm') return null;
 
-  return { ncm: pos.codigo, nivel: pos.nivel, descripcion: pos.descripcion, periodo, origenes: rows };
+  return { ncm: pos.codigo, nivel: pos.nivel, descripcion: pos.descripcion, filtros, origenes: rows };
 }
 
 // Ítems con valor unitario por debajo de umbral x promedio. El promedio de
 // referencia es siempre el de su propia NCM y unidad, también al consultar
 // una partida: no se compara un ítem contra mercaderías distintas.
-async function valoresBajos(digitos, { periodo, umbral, limite }) {
+// Los filtros de procedencia y aduana eligen QUÉ ítems se revisan; el
+// promedio de referencia es el de todo el mercado en esos períodos.
+async function valoresBajos(digitos, { filtros, umbral, limite }) {
   const pos = await posicionesDe(digitos);
   if (!pos) return null;
 
   const paramsRef = [pos.ids];
-  const filtroRef = filtroPeriodo('x', periodo, paramsRef);
+  const filtroRef = filtroPeriodos('x', filtros, paramsRef);
   const paramsItems = [pos.ids];
-  const filtroItems = filtroPeriodo('i', periodo, paramsItems);
+  const filtroItems = filtroPeriodos('i', filtros, paramsItems) + filtroProcedenciaAduana('i', 'c', filtros, paramsItems);
 
   const [rows] = await pool.query(`
     WITH ref AS (
@@ -220,7 +261,8 @@ async function valoresBajos(digitos, { periodo, umbral, limite }) {
       GROUP BY x.IdPosicion, x.UnidadMedida
     )
     SELECT c.NroAduana AS nro_despacho, c.Periodo AS periodo, imp.Nombre AS importador,
-           i.Item AS item, n.PosicionSIM AS ncm, i.PaisOrigen AS pais_origen, i.UnidadMedida AS unidad,
+           i.Item AS item, n.PosicionSIM AS ncm, i.PaisOrigen AS pais_origen,
+           i.PaisProcedencia AS pais_procedencia, c.AduanaOficializacion AS aduana, i.UnidadMedida AS unidad,
            i.CantidadUnidades AS cantidad, i.ValorUnitario AS valor_unitario,
            ROUND(r.vu_ref, 6)                   AS vu_promedio,
            ROUND(i.ValorUnitario / r.vu_ref, 3) AS proporcion
@@ -234,7 +276,7 @@ async function valoresBajos(digitos, { periodo, umbral, limite }) {
     ORDER BY proporcion
     LIMIT ?`, [...paramsRef, ...paramsItems, umbral, limite]);
 
-  return { ncm: pos.codigo, nivel: pos.nivel, descripcion: pos.descripcion, periodo, umbral, items: rows };
+  return { ncm: pos.codigo, nivel: pos.nivel, descripcion: pos.descripcion, filtros, umbral, items: rows };
 }
 
 async function buscarImportadores(texto, periodo) {
@@ -408,6 +450,7 @@ module.exports = {
   valoresBajos,
   buscarImportadores,
   triangulaciones,
+  catalogos,
   sugerirDespachos,
   sugerirNcm,
   sugerirImportadores,

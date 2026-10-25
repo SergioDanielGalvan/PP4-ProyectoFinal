@@ -54,12 +54,13 @@ administración y el SQL libre exigen token de admin **siempre**.
 | Método y ruta | Parámetros | Devuelve |
 |---|---|---|
 | `GET /impo/periodos` | | `[{ periodo, caratulas, items }]` |
+| `GET /impo/catalogos` | | `{ regiones, paises, aduanas }` para armar los filtros |
 | `GET /impo/matriz` | `nivel` (`seccion`/`capitulo`), `seccion` (I…XXI), `grupos` (lista: CONSUMO,TEMP,ZF,REDES,AAE) | FOB por sección o capítulo y mes (ver abajo) |
 | `GET /impo/despachos` | `periodo`, `importador`, `destinacion`, `pagina`, `tamanio` | `{ total, pagina, tamanio, resultados }` |
 | `GET /impo/despachos/:nro` | | carátula con ítems y liquidación |
 | `GET /impo/subpartidas` | `desde`, `hasta`, `periodo`, `limite` | resumen por NCM |
-| `GET /impo/ncm/:ncm/precios` | `periodo` | valores unitarios por origen y unidad; `nivel` y, fuera de NCM, `posiciones` (cuántas NCM entran en cada fila) |
-| `GET /impo/ncm/:ncm/valores-bajos` | `periodo`, `umbral`, `limite` | ítems bajo el umbral, cada uno contra el promedio de su propia NCM y unidad; incluye `ncm` |
+| `GET /impo/ncm/:ncm/precios` | `periodo` o `desde`/`hasta`, `region`, `paises`, `aduanas` (ver filtros) | valores unitarios por origen y unidad; `nivel` y, fuera de NCM, `posiciones` (cuántas NCM entran en cada fila) |
+| `GET /impo/ncm/:ncm/valores-bajos` | los mismos filtros, `umbral`, `limite` | ítems bajo el umbral, cada uno contra el promedio de su propia NCM y unidad; incluye `ncm` |
 | `GET /impo/importadores` | `q`, `periodo` | despachos, ítems y FOB por importador |
 | `GET /impo/triangulaciones` | `periodo`, `limite` | origen distinto de procedencia |
 | `GET /impo/sugerencias/despachos` | `prefijo` (5 a 16 caracteres: año y aduana como mínimo), `periodo`, `limite` (15) | `[{ nro_despacho, periodo, importador }]` |
@@ -69,6 +70,15 @@ administración y el SQL libre exigen token de admin **siempre**.
 `periodo` es AAAAMM (`202608`). Montos en US$ FOB.
 
 En `/ncm/:ncm/...`, `:ncm` es un código completo: partida (`8471`), subpartida (`8471.30` u `847130`) o NCM (`8471.30.12` u `84713012`). Otra cantidad de dígitos da 400. La respuesta trae `nivel`: `partida`, `subpartida` o `ncm`.
+
+Filtros de Precios (todos opcionales, se combinan):
+
+- `desde` / `hasta` (AAAAMM): rango de períodos; si viene, reemplaza a `periodo`.
+- `region`: primer dígito del código de país de **procedencia** (1 África, 2 América, 3 Asia, 4 Europa, 5 Oceanía, 7 varios, 9 indeterminado).
+- `paises`: códigos de país de procedencia separados por coma (`310,225`).
+- `aduanas`: códigos de aduana de oficialización separados por coma (`001,073`).
+
+En `valores-bajos` los filtros eligen qué ítems se revisan; el promedio de referencia es el de todo el mercado de la NCM en esos períodos. Cada ítem trae `pais_procedencia` y `aduana`.
 
 Las rutas `/sugerencias/*` son para autocompletar mientras se escribe: respuestas cortas, con límite, sobre índices. En la página, `autocompletar()` (al final de `impo.js`) espera 250 ms después de la última tecla antes de pedir.
 

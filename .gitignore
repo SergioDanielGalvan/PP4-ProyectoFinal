@@ -22,3 +22,6 @@ Thumbs.db
 
 # Informes de carga (se regeneran en cada carga)
 carga/informes/
+
+# Paquetes de git que se pasan a mano
+*.bundle

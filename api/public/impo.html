@@ -213,6 +213,32 @@
                   <button type="button" id="b-limpiar-ncm" class="btn btn-outline-secondary">Limpiar</button>
                 </div>
               </div>
+              <!-- Filtros: procedencia (región o país), aduana y rango de períodos -->
+              <div class="row g-2 align-items-end mt-1" id="filtros-ncm">
+                <div class="col-6 col-md-2">
+                  <label for="fn-region" class="form-label small fw-semibold text-secondary">Región de procedencia</label>
+                  <select id="fn-region" class="form-select form-select-sm"><option value="">Todas</option></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label for="fn-pais" class="form-label small fw-semibold text-secondary">País de procedencia</label>
+                  <select id="fn-pais" class="form-select form-select-sm"><option value="">Todos</option></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label for="fn-aduana" class="form-label small fw-semibold text-secondary">Aduana</label>
+                  <select id="fn-aduana" class="form-select form-select-sm"><option value="">Todas</option></select>
+                </div>
+                <div class="col-3 col-md-2">
+                  <label for="fn-desde" class="form-label small fw-semibold text-secondary">Desde</label>
+                  <select id="fn-desde" class="form-select form-select-sm"><option value="">—</option></select>
+                </div>
+                <div class="col-3 col-md-2">
+                  <label for="fn-hasta" class="form-label small fw-semibold text-secondary">Hasta</label>
+                  <select id="fn-hasta" class="form-select form-select-sm"><option value="">—</option></select>
+                </div>
+                <div class="col-12">
+                  <p class="form-text mb-0">Sin rango, vale el período de arriba. Las alertas de valores bajos revisan sólo los ítems que pasan los filtros, comparados con el promedio de todo el mercado de su NCM.</p>
+                </div>
+              </div>
             </form>
           </div>
         </div>
