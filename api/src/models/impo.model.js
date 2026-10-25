@@ -117,13 +117,6 @@ async function listarDespachos({ periodo, importador, destinacion, pagina, taman
   return { total, pagina, tamanio, resultados: rows };
 }
 
-async function buscarNcm(ncmDigitos) {
-  const [rows] = await pool.query(
-    "SELECT IdPosicion AS id, PosicionSIM AS ncm, DescripcionNCM AS descripcion FROM posicion WHERE REPLACE(PosicionSIM, '.', '') = ? LIMIT 1",
-    [ncmDigitos]);
-  return rows[0] || null;
-}
-
 // Resumen por subpartida NCM dentro de un rango (capítulo, partida o subpartida).
 // desde/hasta llegan como dígitos ya completados a 8 (00000000-99999999).
 // Se agrupa también por unidad: no se suman kilos con unidades.
@@ -156,14 +149,41 @@ async function resumenSubpartidas({ desde, hasta, periodo, limite }) {
   return { desde, hasta, periodo, recortado, totales, subpartidas };
 }
 
-// Precios por país de origen y unidad: base para comparar valores declarados
-async function preciosPorNcm(ncmDigitos, periodo) {
-  const ncm = await buscarNcm(ncmDigitos);
-  if (!ncm) return null;
+// Posiciones del KIT que abarca un código completo de partida (4 dígitos),
+// subpartida (6) o NCM (8). PosicionSIM lleva puntos (8471.30.12): el prefijo
+// se arma igual para usar su índice único.
+const NIVELES = { 4: 'partida', 6: 'subpartida', 8: 'ncm' };
 
-  const params = [ncm.id];
+async function posicionesDe(digitos) {
+  const prefijo = [digitos.slice(0, 4), digitos.slice(4, 6), digitos.slice(6, 8)].filter(Boolean).join('.');
+  const [rows] = await pool.query(`
+    SELECT IdPosicion AS id, PosicionSIM AS ncm, DescripcionNCM AS descripcion
+    FROM posicion
+    WHERE PosicionSIM LIKE ?
+    ORDER BY PosicionSIM`, [digitos.length === 8 ? prefijo : `${prefijo}%`]);
+  if (rows.length === 0) return null;
+
+  // En una NCM la descripción es la del KIT; en partida y subpartida, la del
+  // capítulo más la cantidad de posiciones que abarca (el KIT no describe la partida)
+  let descripcion = rows[0].descripcion;
+  if (digitos.length < 8) {
+    const [[cap]] = await pool.query('SELECT Descrip AS descrip FROM capitulo WHERE Codigo = ?', [digitos.slice(0, 2)]);
+    descripcion = `${cap ? `Capítulo ${digitos.slice(0, 2)}: ${cap.descrip}. ` : ''}Abarca ${rows.length} posiciones NCM.`;
+  }
+  return { codigo: prefijo, nivel: NIVELES[digitos.length], descripcion, ids: rows.map((r) => r.id) };
+}
+
+// Precios por país de origen y unidad: base para comparar valores declarados.
+// En partida o subpartida se suman varias NCM: "posiciones" dice cuántas
+// distintas entran en cada fila (el promedio mezcla mercaderías distintas).
+async function preciosPorNcm(digitos, periodo) {
+  const pos = await posicionesDe(digitos);
+  if (!pos) return null;
+
+  const params = [pos.ids];
   const [rows] = await pool.query(`
     SELECT i.PaisOrigen AS pais_origen, p.Descrip AS pais_origen_desc, i.UnidadMedida AS unidad,
+           COUNT(DISTINCT i.IdPosicion) AS posiciones,
            COUNT(*)                AS items,
            SUM(i.CantidadUnidades) AS cantidad,
            SUM(i.FobTotalDolares)           AS fob_usd,
@@ -172,45 +192,49 @@ async function preciosPorNcm(ncmDigitos, periodo) {
            ROUND(SUM(i.FobTotalDolares) / NULLIF(SUM(i.CantidadUnidades), 0), 6) AS vu_promedio
     FROM item i
     LEFT JOIN paises p ON p.Codigo = i.PaisOrigen
-    WHERE i.IdPosicion = ?${filtroPeriodo('i', periodo, params)}
+    WHERE i.IdPosicion IN (?)${filtroPeriodo('i', periodo, params)}
     GROUP BY i.PaisOrigen, p.Descrip, i.UnidadMedida
     ORDER BY fob_usd DESC`, params);
+  if (rows.length === 0 && pos.nivel !== 'ncm') return null;
 
-  return { ncm: ncm.ncm, descripcion: ncm.descripcion, periodo, origenes: rows };
+  return { ncm: pos.codigo, nivel: pos.nivel, descripcion: pos.descripcion, periodo, origenes: rows };
 }
 
-// Ítems con valor unitario por debajo de umbral x promedio de la NCM (misma unidad)
-async function valoresBajos(ncmDigitos, { periodo, umbral, limite }) {
-  const ncm = await buscarNcm(ncmDigitos);
-  if (!ncm) return null;
+// Ítems con valor unitario por debajo de umbral x promedio. El promedio de
+// referencia es siempre el de su propia NCM y unidad, también al consultar
+// una partida: no se compara un ítem contra mercaderías distintas.
+async function valoresBajos(digitos, { periodo, umbral, limite }) {
+  const pos = await posicionesDe(digitos);
+  if (!pos) return null;
 
-  const paramsRef = [ncm.id];
+  const paramsRef = [pos.ids];
   const filtroRef = filtroPeriodo('x', periodo, paramsRef);
-  const paramsItems = [ncm.id];
+  const paramsItems = [pos.ids];
   const filtroItems = filtroPeriodo('i', periodo, paramsItems);
 
   const [rows] = await pool.query(`
     WITH ref AS (
-      SELECT x.UnidadMedida, SUM(x.FobTotalDolares) / NULLIF(SUM(x.CantidadUnidades), 0) AS vu_ref
+      SELECT x.IdPosicion, x.UnidadMedida, SUM(x.FobTotalDolares) / NULLIF(SUM(x.CantidadUnidades), 0) AS vu_ref
       FROM item x
-      WHERE x.IdPosicion = ?${filtroRef}
-      GROUP BY x.UnidadMedida
+      WHERE x.IdPosicion IN (?)${filtroRef}
+      GROUP BY x.IdPosicion, x.UnidadMedida
     )
     SELECT c.NroAduana AS nro_despacho, c.Periodo AS periodo, imp.Nombre AS importador,
-           i.Item AS item, i.PaisOrigen AS pais_origen, i.UnidadMedida AS unidad,
+           i.Item AS item, n.PosicionSIM AS ncm, i.PaisOrigen AS pais_origen, i.UnidadMedida AS unidad,
            i.CantidadUnidades AS cantidad, i.ValorUnitario AS valor_unitario,
            ROUND(r.vu_ref, 6)                   AS vu_promedio,
            ROUND(i.ValorUnitario / r.vu_ref, 3) AS proporcion
     FROM item i
-    JOIN ref r            ON r.UnidadMedida <=> i.UnidadMedida
+    JOIN ref r            ON r.IdPosicion = i.IdPosicion AND r.UnidadMedida <=> i.UnidadMedida
+    JOIN posicion n       ON n.IdPosicion = i.IdPosicion
     JOIN caratula c       ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
     JOIN importadores imp ON imp.IdImportador = c.IdImportador
-    WHERE i.IdPosicion = ?${filtroItems}
+    WHERE i.IdPosicion IN (?)${filtroItems}
       AND i.ValorUnitario < r.vu_ref * ?
     ORDER BY proporcion
     LIMIT ?`, [...paramsRef, ...paramsItems, umbral, limite]);
 
-  return { ncm: ncm.ncm, descripcion: ncm.descripcion, periodo, umbral, items: rows };
+  return { ncm: pos.codigo, nivel: pos.nivel, descripcion: pos.descripcion, periodo, umbral, items: rows };
 }
 
 async function buscarImportadores(texto, periodo) {

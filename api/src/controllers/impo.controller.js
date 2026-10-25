@@ -23,9 +23,12 @@ function entero(valor, porDefecto, min, max) {
   return Math.min(Math.max(n, min), max);
 }
 
+// Código completo de partida (4 dígitos), subpartida (6) o NCM (8), con o sin puntos
 function ncmNormalizada(valor) {
   const digitos = String(valor).replace(/\./g, '');
-  if (!/^\d{8}$/.test(digitos)) throw new HttpError(400, 'La NCM lleva 8 dígitos, con o sin puntos (8471.30.12).');
+  if (!/^(\d{4}|\d{6}|\d{8})$/.test(digitos)) {
+    throw new HttpError(400, 'Indicá una partida completa (8471), una subpartida (8471.30) o una NCM (8471.30.12).');
+  }
   return digitos;
 }
 
@@ -102,7 +105,7 @@ const listarDespachos = handler(async (req, res) => {
 const preciosPorNcm = handler(async (req, res) => {
   const ncm = ncmNormalizada(req.params.ncm);
   const resultado = await model.preciosPorNcm(ncm, periodoOpcional(req.query.periodo));
-  if (!resultado) throw new HttpError(404, `La NCM ${req.params.ncm} no tiene importaciones cargadas.`);
+  if (!resultado) throw new HttpError(404, `La posición ${req.params.ncm} no existe en el KIT o no tiene importaciones cargadas.`);
   res.json(resultado);
 });
 
@@ -115,7 +118,7 @@ const valoresBajos = handler(async (req, res) => {
     umbral,
     limite: entero(req.query.limite, 50, 1, 200),
   });
-  if (!resultado) throw new HttpError(404, `La NCM ${req.params.ncm} no tiene importaciones cargadas.`);
+  if (!resultado) throw new HttpError(404, `La posición ${req.params.ncm} no existe en el KIT o no tiene importaciones cargadas.`);
   res.json(resultado);
 });
 

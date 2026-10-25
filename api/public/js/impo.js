@@ -422,17 +422,25 @@ $('#f-ncm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const destino = $('#r-ncm');
   const ncm = $('#ncm').value.trim();
-  if (!ncm) return mensaje(destino, 'Escribí la posición NCM, por ejemplo 8471.30.12 (con o sin puntos).', true);
+  if (!ncm) return mensaje(destino, 'Escribí una partida (8471), una subpartida (8471.30) o una NCM (8471.30.12), con o sin puntos.', true);
+  if (!/^(\d{4}|\d{6}|\d{8})$/.test(ncm.replace(/\./g, ''))) {
+    return mensaje(destino, 'La consulta va por partida completa (4 dígitos), subpartida (6) o NCM (8). Por ejemplo 8471, 8471.30 u 8471.30.12.', true);
+  }
   try {
     const [precios, bajos] = await Promise.all([
       api(`/ncm/${encodeURIComponent(ncm)}/precios`, { periodo: periodo() }),
       api(`/ncm/${encodeURIComponent(ncm)}/valores-bajos`, { periodo: periodo(), umbral: $('#umbral').value }),
     ]);
 
+    // En partida o subpartida se suman varias NCM: se muestra cuántas y la NCM de cada alerta
+    const agrupa = precios.nivel !== 'ncm';
+    const NOMBRE_NIVEL = { partida: 'Partida', subpartida: 'Subpartida', ncm: 'NCM' };
+
     const filasOrigen = precios.origenes.map((o) => `
       <tr>
         <td>${codigo(o.pais_origen, o.pais_origen_desc)}</td>
         <td class="codigo">${esc(o.unidad)}</td>
+        ${agrupa ? `<td class="n">${num(o.posiciones)}</td>` : ''}
         <td class="n">${o.items}</td>
         <td class="n">${num(o.cantidad)}</td>
         <td class="n">${usd(o.vu_min)}</td>
@@ -444,6 +452,7 @@ $('#f-ncm').addEventListener('submit', async (e) => {
     const filasBajos = bajos.items.map((b) => `
       <tr class="bajo">
         <td class="codigo">${esc(b.nro_despacho)}</td>
+        ${agrupa ? `<td class="codigo">${esc(b.ncm)}</td>` : ''}
         <td>${esc(b.importador)}</td>
         <td class="codigo">${esc(b.pais_origen)}</td>
         <td class="n">${num(b.cantidad)}</td>
@@ -459,17 +468,21 @@ $('#f-ncm').addEventListener('submit', async (e) => {
       </div>`;
 
     destino.innerHTML = barraAcciones + `
-      <h2>${esc(precios.ncm)}</h2>
+      <h2>${NOMBRE_NIVEL[precios.nivel] || 'NCM'} ${esc(precios.ncm)}</h2>
       <p class="nota">${esc(corto(precios.descripcion, 300) || 'Sin descripción en el KIT.')}</p>
+      ${agrupa ? '<p class="nota">El promedio por origen junta todas las NCM de la ' + (precios.nivel === 'partida' ? 'partida' : 'subpartida')
+        + ' con la misma unidad: si son mercaderías distintas, sirve como orientación. Las alertas de abajo comparan cada ítem con el promedio de su propia NCM.</p>' : ''}
       ${tabla([
-        { titulo: 'Origen' }, { titulo: 'Unidad' }, { titulo: 'Ítems', n: true }, { titulo: 'Cantidad', n: true },
+        { titulo: 'Origen' }, { titulo: 'Unidad' }, ...(agrupa ? [{ titulo: 'NCM distintas', n: true }] : []),
+        { titulo: 'Ítems', n: true }, { titulo: 'Cantidad', n: true },
         { titulo: 'Mínimo', n: true }, { titulo: 'Promedio', n: true }, { titulo: 'Máximo', n: true },
         { titulo: 'FOB', n: true },
       ], filasOrigen)}
       <h2>Valores unitarios por debajo del ${num(bajos.umbral * 100)} % del promedio</h2>
       ${filasBajos.length ? tabla([
-        { titulo: 'Despacho' }, { titulo: 'Importador' }, { titulo: 'Origen' }, { titulo: 'Cantidad', n: true },
-        { titulo: 'Declarado', n: true }, { titulo: 'Promedio NCM', n: true }, { titulo: 'Proporción', n: true },
+        { titulo: 'Despacho' }, ...(agrupa ? [{ titulo: 'NCM' }] : []), { titulo: 'Importador' }, { titulo: 'Origen' },
+        { titulo: 'Cantidad', n: true }, { titulo: 'Declarado', n: true }, { titulo: 'Promedio NCM', n: true },
+        { titulo: 'Proporción', n: true },
       ], filasBajos) : '<p class="mensaje">Ningún ítem queda por debajo de ese umbral.</p>'}`;
 
     // Evento Imprimir / PDF
@@ -494,12 +507,12 @@ $('#f-ncm').addEventListener('submit', async (e) => {
 
         const lineas = [
           ['SISTEMA COMEX - PRECIOS POR POSICION NCM'],
-          ['Posicion NCM', precios.ncm],
+          [NOMBRE_NIVEL[precios.nivel] || 'NCM', precios.ncm],
           ['Descripcion', precios.descripcion || ''],
           ['Periodo', periodo() ? mes(periodo()) : 'Todos'],
           [],
           ['RESUMEN POR ORIGEN'],
-          ['Origen', 'Codigo Pais', 'Unidad', 'Items', 'Cantidad', 'VU Minimo USD', 'VU Promedio USD', 'VU Maximo USD', 'FOB USD']
+          ['Origen', 'Codigo Pais', 'Unidad', ...(agrupa ? ['NCM distintas'] : []), 'Items', 'Cantidad', 'VU Minimo USD', 'VU Promedio USD', 'VU Maximo USD', 'FOB USD']
         ];
 
         precios.origenes.forEach((o) => {
@@ -507,6 +520,7 @@ $('#f-ncm').addEventListener('submit', async (e) => {
             o.pais_origen_desc || o.pais_origen,
             o.pais_origen,
             o.unidad,
+            ...(agrupa ? [o.posiciones] : []),
             o.items,
             importe(o.cantidad),
             importe(o.vu_min),
@@ -519,10 +533,11 @@ $('#f-ncm').addEventListener('submit', async (e) => {
         if (bajos.items && bajos.items.length) {
           lineas.push([]);
           lineas.push([`VALORES POR DEBAJO DEL ${num(bajos.umbral * 100)}% DEL PROMEDIO`]);
-          lineas.push(['Despacho', 'Importador', 'Origen', 'Cantidad', 'Declarado USD', 'Promedio NCM USD', 'Proporcion']);
+          lineas.push(['Despacho', ...(agrupa ? ['NCM'] : []), 'Importador', 'Origen', 'Cantidad', 'Declarado USD', 'Promedio NCM USD', 'Proporcion']);
           bajos.items.forEach((b) => {
             lineas.push([
               b.nro_despacho,
+              ...(agrupa ? [b.ncm] : []),
               b.importador,
               b.pais_origen,
               importe(b.cantidad),
@@ -1080,6 +1095,9 @@ function autocompletar(input, { minimo, buscar, alElegir }) {
   let pedido = 0;   // descarta respuestas que llegan después de una más nueva
 
   const cerrar = () => { lista.hidden = true; activa = -1; input.setAttribute('aria-expanded', 'false'); };
+  // Cancela también una búsqueda en espera o en camino: si el usuario ya
+  // buscó o apretó Escape, la lista no tiene que aparecer después
+  const cancelar = () => { clearTimeout(espera); pedido += 1; cerrar(); };
   const marcar = (i) => {
     activa = i;
     [...lista.children].forEach((li, j) => li.setAttribute('aria-selected', j === i));
@@ -1089,7 +1107,7 @@ function autocompletar(input, { minimo, buscar, alElegir }) {
     const op = opciones[i];
     if (!op) return;
     input.value = op.valor;
-    cerrar();
+    cancelar();
     if (alElegir) alElegir(op);
   };
 
@@ -1114,11 +1132,11 @@ function autocompletar(input, { minimo, buscar, alElegir }) {
   });
 
   input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { cancelar(); return; }
     if (lista.hidden) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); marcar(Math.min(activa + 1, opciones.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); marcar(Math.max(activa - 1, 0)); }
     else if (e.key === 'Enter' && activa >= 0) { e.preventDefault(); elegir(activa); }
-    else if (e.key === 'Escape') { cerrar(); }
   });
   // mousedown y no click: se dispara antes de que el campo pierda el foco
   lista.addEventListener('mousedown', (e) => {
@@ -1127,8 +1145,8 @@ function autocompletar(input, { minimo, buscar, alElegir }) {
     e.preventDefault();
     elegir(Number(li.dataset.i));
   });
-  input.addEventListener('blur', () => setTimeout(cerrar, 100));
-  input.closest('form')?.addEventListener('submit', cerrar);
+  input.addEventListener('blur', () => setTimeout(cancelar, 100));
+  input.closest('form')?.addEventListener('submit', cancelar);
 }
 
 // Despacho: desde año + aduana (5 caracteres)

@@ -58,8 +58,8 @@ administración y el SQL libre exigen token de admin **siempre**.
 | `GET /impo/despachos` | `periodo`, `importador`, `destinacion`, `pagina`, `tamanio` | `{ total, pagina, tamanio, resultados }` |
 | `GET /impo/despachos/:nro` | | carátula con ítems y liquidación |
 | `GET /impo/subpartidas` | `desde`, `hasta`, `periodo`, `limite` | resumen por NCM |
-| `GET /impo/ncm/:ncm/precios` | `periodo` | valores unitarios por origen |
-| `GET /impo/ncm/:ncm/valores-bajos` | `periodo`, `umbral`, `limite` | ítems bajo el umbral |
+| `GET /impo/ncm/:ncm/precios` | `periodo` | valores unitarios por origen y unidad; `nivel` y, fuera de NCM, `posiciones` (cuántas NCM entran en cada fila) |
+| `GET /impo/ncm/:ncm/valores-bajos` | `periodo`, `umbral`, `limite` | ítems bajo el umbral, cada uno contra el promedio de su propia NCM y unidad; incluye `ncm` |
 | `GET /impo/importadores` | `q`, `periodo` | despachos, ítems y FOB por importador |
 | `GET /impo/triangulaciones` | `periodo`, `limite` | origen distinto de procedencia |
 | `GET /impo/sugerencias/despachos` | `prefijo` (5 a 16 caracteres: año y aduana como mínimo), `periodo`, `limite` (15) | `[{ nro_despacho, periodo, importador }]` |
@@ -67,6 +67,8 @@ administración y el SQL libre exigen token de admin **siempre**.
 | `GET /impo/sugerencias/importadores` | `q` (3 letras o más), `limite` (15) | `[{ nombre }]`, primero los que empiezan con el texto |
 
 `periodo` es AAAAMM (`202608`). Montos en US$ FOB.
+
+En `/ncm/:ncm/...`, `:ncm` es un código completo: partida (`8471`), subpartida (`8471.30` u `847130`) o NCM (`8471.30.12` u `84713012`). Otra cantidad de dígitos da 400. La respuesta trae `nivel`: `partida`, `subpartida` o `ncm`.
 
 Las rutas `/sugerencias/*` son para autocompletar mientras se escribe: respuestas cortas, con límite, sobre índices. En la página, `autocompletar()` (al final de `impo.js`) espera 250 ms después de la última tecla antes de pedir.
 
