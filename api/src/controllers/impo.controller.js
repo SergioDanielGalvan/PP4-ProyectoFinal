@@ -132,6 +132,40 @@ const triangulaciones = handler(async (req, res) => {
   ));
 });
 
+// ---------- sugerencias (autocompletado) ----------
+// Escapa los comodines de LIKE en lo que escribe el usuario
+const sinComodines = (t) => t.replace(/[\\%_]/g, (x) => `\\${x}`);
+
+// /sugerencias/despachos?prefijo=26001IC04 : desde 5 caracteres (año + aduana)
+const sugerirDespachos = handler(async (req, res) => {
+  const prefijo = String(req.query.prefijo || '').trim().toUpperCase();
+  if (!/^[0-9A-Z]{5,16}$/.test(prefijo)) {
+    throw new HttpError(400, 'El prefijo lleva de 5 a 16 caracteres: año y aduana como mínimo, por ejemplo 26001.');
+  }
+  res.json(await model.sugerirDespachos(prefijo, periodoOpcional(req.query.periodo), entero(req.query.limite, 15, 1, 50)));
+});
+
+// /sugerencias/ncm?q=847130 o ?q=notebook : código (2 a 8 dígitos) o texto (3 letras o más)
+const sugerirNcm = handler(async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const limite = entero(req.query.limite, 15, 1, 50);
+  const digitos = q.replace(/\./g, '');
+  if (/^\d{2,8}$/.test(digitos)) {
+    // Arma el prefijo con los puntos de PosicionSIM: 8471.30.12
+    const prefijo = [digitos.slice(0, 4), digitos.slice(4, 6), digitos.slice(6, 8)].filter(Boolean).join('.');
+    return res.json(await model.sugerirNcm({ prefijo, limite }));
+  }
+  if (q.length < 3) throw new HttpError(400, 'Escribí al menos 2 dígitos de la posición o 3 letras de la descripción.');
+  res.json(await model.sugerirNcm({ texto: sinComodines(q), limite }));
+});
+
+// /sugerencias/importadores?q=zys : 3 letras o más
+const sugerirImportadores = handler(async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (q.length < 3) throw new HttpError(400, 'Escribí al menos 3 letras del nombre del importador.');
+  res.json(await model.sugerirImportadores(sinComodines(q), entero(req.query.limite, 15, 1, 50)));
+});
+
 module.exports = {
   matriz,
   periodos,
@@ -142,4 +176,7 @@ module.exports = {
   valoresBajos,
   buscarImportadores,
   triangulaciones,
+  sugerirDespachos,
+  sugerirNcm,
+  sugerirImportadores,
 };

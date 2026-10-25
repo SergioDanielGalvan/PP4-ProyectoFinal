@@ -1053,3 +1053,103 @@ document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('cli
 }));
 
 cargarPeriodos().then(cargarLista);
+
+// ---------- autocompletado ----------
+// Lista de sugerencias debajo de un campo mientras se escribe. Se maneja con
+// el mouse o con el teclado (flechas, Enter, Escape). No usa <datalist>: el
+// navegador filtra sus opciones por el texto escrito y esconde las NCM cuando
+// se tipean sin puntos (847130 contra 8471.30.12).
+function autocompletar(input, { minimo, buscar, alElegir }) {
+  const caja = document.createElement('div');
+  caja.className = 'ac';
+  input.parentNode.insertBefore(caja, input);
+  caja.appendChild(input);
+  const lista = document.createElement('ul');
+  lista.className = 'ac-lista';
+  lista.setAttribute('role', 'listbox');
+  lista.id = `${input.id}-sugerencias`;
+  lista.hidden = true;
+  caja.appendChild(lista);
+  input.setAttribute('autocomplete', 'off');
+  input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-controls', lista.id);
+
+  let opciones = [];
+  let activa = -1;
+  let espera = null;
+  let pedido = 0;   // descarta respuestas que llegan después de una más nueva
+
+  const cerrar = () => { lista.hidden = true; activa = -1; input.setAttribute('aria-expanded', 'false'); };
+  const marcar = (i) => {
+    activa = i;
+    [...lista.children].forEach((li, j) => li.setAttribute('aria-selected', j === i));
+    if (lista.children[i]) lista.children[i].scrollIntoView({ block: 'nearest' });
+  };
+  const elegir = (i) => {
+    const op = opciones[i];
+    if (!op) return;
+    input.value = op.valor;
+    cerrar();
+    if (alElegir) alElegir(op);
+  };
+
+  input.addEventListener('input', () => {
+    clearTimeout(espera);
+    const texto = input.value.trim();
+    if (!minimo(texto)) { cerrar(); return; }
+    espera = setTimeout(async () => {
+      const n = ++pedido;
+      try {
+        const r = await buscar(texto);
+        if (n !== pedido) return;
+        opciones = r;
+        if (opciones.length === 0) { cerrar(); return; }
+        lista.innerHTML = opciones.map((o, i) => `<li role="option" data-i="${i}">
+          <span class="ac-valor">${esc(o.valor)}</span><span class="ac-detalle">${esc(o.detalle || '')}</span></li>`).join('');
+        lista.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        activa = -1;
+      } catch { cerrar(); }   // una sugerencia que falla no molesta al usuario
+    }, 250);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (lista.hidden) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); marcar(Math.min(activa + 1, opciones.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); marcar(Math.max(activa - 1, 0)); }
+    else if (e.key === 'Enter' && activa >= 0) { e.preventDefault(); elegir(activa); }
+    else if (e.key === 'Escape') { cerrar(); }
+  });
+  // mousedown y no click: se dispara antes de que el campo pierda el foco
+  lista.addEventListener('mousedown', (e) => {
+    const li = e.target.closest('li[data-i]');
+    if (!li) return;
+    e.preventDefault();
+    elegir(Number(li.dataset.i));
+  });
+  input.addEventListener('blur', () => setTimeout(cerrar, 100));
+  input.closest('form')?.addEventListener('submit', cerrar);
+}
+
+// Despacho: desde año + aduana (5 caracteres)
+autocompletar($('#nro'), {
+  minimo: (t) => /^[0-9A-Za-z]{5,15}$/.test(t),
+  buscar: async (t) => (await api('/sugerencias/despachos', { prefijo: t.toUpperCase(), periodo: periodo() }))
+    .map((d) => ({ valor: d.nro_despacho, detalle: `${d.importador} · ${mes(d.periodo)}` })),
+  alElegir: () => $('#f-despacho').requestSubmit(),
+});
+
+// Importador: desde 3 letras
+autocompletar($('#q'), {
+  minimo: (t) => t.length >= 3,
+  buscar: async (t) => (await api('/sugerencias/importadores', { q: t })).map((i) => ({ valor: i.nombre })),
+  alElegir: () => $('#f-importadores').requestSubmit(),
+});
+
+// NCM: 2 dígitos o más (con o sin puntos) o 3 letras de la descripción
+const minimoNcm = (t) => /^[\d.]+$/.test(t) ? t.replace(/\./g, '').length >= 2 : t.length >= 3;
+const buscarNcm = async (t) => (await api('/sugerencias/ncm', { q: t }))
+  .map((n) => ({ valor: n.ncm, detalle: corto(n.descripcion, 80) }));
+autocompletar($('#ncm'), { minimo: minimoNcm, buscar: buscarNcm, alElegir: () => $('#f-ncm').requestSubmit() });
+autocompletar($('#desde'), { minimo: minimoNcm, buscar: buscarNcm });
+autocompletar($('#hasta'), { minimo: minimoNcm, buscar: buscarNcm });

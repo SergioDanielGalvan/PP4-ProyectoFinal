@@ -317,3 +317,51 @@ tr.clic { cursor: pointer; }
     text-decoration: none !important;
   }
 }
+/* ---------- autocompletado ---------- */
+.ac {
+  position: relative;
+  display: inline-block;
+}
+.ac-lista {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(36rem, 90vw);
+  max-height: 18rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  background: var(--hoja);
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 12%);
+}
+.ac-lista li {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+}
+.ac-lista li:hover,
+.ac-lista li[aria-selected="true"] {
+  background: color-mix(in srgb, var(--sello) 10%, var(--hoja));
+}
+.ac-valor {
+  font-family: ui-monospace, Consolas, monospace;
+  white-space: nowrap;
+}
+.ac-detalle {
+  color: var(--tenue);
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media print {
+  .ac-lista { display: none !important; }
+}
