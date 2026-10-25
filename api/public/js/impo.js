@@ -790,6 +790,7 @@ async function cargarTriangulaciones() {
   try {
     const rows = await api('/triangulaciones', {
       periodo: periodo(), ncm: ncmTri, origen: $('#tr-origen').value, procedencia: $('#tr-proc').value,
+      excluir_zonas: $('#tr-zonas').checked ? '1' : '0',
       orden: triEstado.orden, dir: triEstado.dir, limite: triEstado.limite,
     });
     if (!rows || rows.length === 0) {
@@ -912,14 +913,17 @@ function textoFiltrosTri() {
     $('#tr-ncm').value.trim() && `NCM ${$('#tr-ncm').value.trim()}`,
     sel('#tr-origen') && `Origen ${sel('#tr-origen')}`,
     sel('#tr-proc') && `Procedencia ${sel('#tr-proc')}`,
+    $('#tr-zonas').checked ? 'Sin AAE ni zonas francas argentinas' : 'Incluye AAE y zonas francas argentinas',
   ].filter(Boolean).join(' · ');
 }
 
 $('#f-tri').addEventListener('submit', (e) => { e.preventDefault(); cargarTriangulaciones(); });
+$('#tr-zonas').addEventListener('change', () => cargarTriangulaciones());
 $('#b-limpiar-tri').addEventListener('click', () => {
   $('#tr-ncm').value = '';
   $('#tr-origen').value = '';
   $('#tr-proc').value = '';
+  $('#tr-zonas').checked = true;
   Object.assign(triEstado, { orden: 'fob', dir: 'desc' });
   cargarTriangulaciones();
 });

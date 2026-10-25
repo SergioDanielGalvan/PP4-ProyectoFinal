@@ -169,6 +169,8 @@ const triangulaciones = handler(async (req, res) => {
     ncm: q.ncm ? ncmNormalizada(q.ncm) : null,
     origen: pais(q.origen, 'origen'),
     procedencia: pais(q.procedencia, 'procedencia'),
+    // Por defecto se excluyen el AAE de Tierra del Fuego y las zonas francas argentinas
+    excluirZonas: q.excluir_zonas !== '0',
     orden,
     dir: q.dir === 'asc' ? 'asc' : 'desc',
     limite: entero(q.limite, 50, 1, 500),

@@ -62,7 +62,7 @@ administración y el SQL libre exigen token de admin **siempre**.
 | `GET /impo/ncm/:ncm/precios` | `periodo` o `desde`/`hasta`, `region`, `paises`, `aduanas` (ver filtros) | valores unitarios por origen y unidad; `nivel` y, fuera de NCM, `posiciones` (cuántas NCM entran en cada fila) |
 | `GET /impo/ncm/:ncm/valores-bajos` | los mismos filtros, `umbral`, `limite` | ítems bajo el umbral, cada uno contra el promedio de su propia NCM y unidad; incluye `ncm` |
 | `GET /impo/importadores` | `q`, `periodo` | despachos, ítems y FOB por importador |
-| `GET /impo/triangulaciones` | `periodo`, `ncm` (4, 6 u 8 dígitos), `origen`, `procedencia` (códigos de país), `orden` (`ncm`, `origen`, `procedencia`, `items`, `fob`), `dir` (`asc`/`desc`), `limite` (50, hasta 500) | ítems con origen distinto de su procedencia (la del ítem) |
+| `GET /impo/triangulaciones` | `periodo`, `ncm` (4, 6 u 8 dígitos), `origen`, `procedencia` (códigos de país), `excluir_zonas` (por defecto `1`: excluye el AAE de Tierra del Fuego y las zonas francas argentinas; `0` las incluye), `orden` (`ncm`, `origen`, `procedencia`, `items`, `fob`), `dir` (`asc`/`desc`), `limite` (50, hasta 500) | ítems con origen distinto de su procedencia (la del ítem) |
 | `GET /impo/sugerencias/despachos` | `prefijo` (5 a 16 caracteres: año y aduana como mínimo), `periodo`, `limite` (15) | `[{ nro_despacho, periodo, importador }]` |
 | `GET /impo/sugerencias/ncm` | `q`: 2 a 8 dígitos con o sin puntos (`847130`, `8471.30`) o 3 letras de la descripción; `limite` (15) | `[{ ncm, descripcion }]` (descripción cortada a 120 caracteres) |
 | `GET /impo/sugerencias/importadores` | `q` (3 letras o más), `limite` (15) | `[{ nombre }]`, primero los que empiezan con el texto |

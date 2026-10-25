@@ -297,6 +297,13 @@ async function buscarImportadores(texto, periodo) {
 }
 
 // Origen del ítem distinto de la procedencia del embarque
+// Área aduanera especial de Tierra del Fuego y zonas francas argentinas
+// (códigos de país del KIT). Una mercadería que entra desde ellas tiene
+// origen distinto de procedencia sin ser una triangulación comercial. Las
+// zonas francas de otros países (Colón, Iquique, Uruguay) sí cuentan.
+const ZONAS_ARGENTINAS = ['250', '251', '252', '253', '255', '256', '257', '258', '259',
+  '262', '263', '264', '266', '267', '268', '269'];
+
 // Columnas por las que se puede ordenar: nombre en la API -> expresión SQL
 const ORDEN_TRIANGULACIONES = {
   ncm: 'ncm', origen: 'pais_origen_desc', procedencia: 'pais_procedencia_desc', items: 'items', fob: 'fob_usd',
@@ -306,7 +313,7 @@ const ORDEN_TRIANGULACIONES = {
 // (item.PaisProcedencia), que es la que trae cada línea del archivo de ARCA.
 // Filtros opcionales: partida, subpartida o NCM (4, 6 u 8 dígitos), país de
 // origen y país de procedencia. Orden por cualquier columna, ASC o DESC.
-async function triangulaciones({ periodo, ncm, origen, procedencia, orden, dir, limite }) {
+async function triangulaciones({ periodo, ncm, origen, procedencia, excluirZonas, orden, dir, limite }) {
   const params = [];
   let where = filtroPeriodo('i', periodo, params);
   if (ncm) {
@@ -317,6 +324,10 @@ async function triangulaciones({ periodo, ncm, origen, procedencia, orden, dir, 
   }
   if (origen) { where += ' AND i.PaisOrigen = ?'; params.push(origen); }
   if (procedencia) { where += ' AND i.PaisProcedencia = ?'; params.push(procedencia); }
+  if (excluirZonas) {
+    where += ' AND i.PaisOrigen NOT IN (?) AND i.PaisProcedencia NOT IN (?)';
+    params.push(ZONAS_ARGENTINAS, ZONAS_ARGENTINAS);
+  }
   const columna = ORDEN_TRIANGULACIONES[orden] || 'fob_usd';
   const sentido = dir === 'asc' ? 'ASC' : 'DESC';
 
