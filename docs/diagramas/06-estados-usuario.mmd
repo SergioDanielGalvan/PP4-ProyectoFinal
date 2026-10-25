@@ -1,0 +1,21 @@
+stateDiagram-v2
+    direction LR
+    [*] --> Activo: alta por admin
+    Activo --> Bloqueado: 5 claves erróneas
+    Bloqueado --> Activo: pasan 15 min
+    Activo --> Inactivo: admin desactiva
+    Inactivo --> Activo: admin reactiva
+
+    state Activo {
+        direction LR
+        [*] --> SinSesion
+        SinSesion --> ConSesion: login OK (JWT)
+        ConSesion --> SinSesion: vence (8 h) / salir
+    }
+    note right of Inactivo
+        Los usuarios no se borran: se desactivan.
+        Un token vigente deja de servir
+        en menos de 1 minuto.
+        Cambio o reseteo de clave: el usuario
+        sigue Activo.
+    end note

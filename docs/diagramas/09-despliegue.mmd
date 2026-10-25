@@ -1,0 +1,37 @@
+flowchart LR
+    subgraph CLIENTE["Dispositivo del usuario"]
+        NAV["Navegador web"]
+    end
+
+    subgraph RENDER["Render · Web Service Free<br/>Virginia (US East)"]
+        NODE["Node.js 18+<br/>API Express + front estático"]
+    end
+
+    subgraph TIDB["TiDB Cloud Starter<br/>AWS us-east-1"]
+        BD[("Base comex<br/>3 meses · 2,3 GB")]
+    end
+
+    subgraph GH["GitHub"]
+        REPO["PP4-ProyectoFinal"]
+    end
+
+    subgraph LAN["Red local (oficina)"]
+        subgraph M3["PC-MULETO3 · servidor"]
+            XAMPP[("MariaDB 10.4 (XAMPP)<br/>base de trabajo · 1,6 GB")]
+            CARGA["Scripts de carga<br/>Node.js"]
+        end
+        subgraph M2["PC-MULETO2 · desarrollo"]
+            DEV["VS Code<br/>API local :3000"]
+        end
+    end
+
+    ARCA[("ARCA<br/>información agregada")]
+
+    NAV -- "HTTPS 443" --> NODE
+    NODE -- "MySQL + TLS :4000" --> BD
+    REPO -- "deploy automático<br/>en cada push" --> NODE
+    DEV -- "git push" --> REPO
+    DEV -- "MySQL :3306" --> XAMPP
+    ARCA -- "descarga ZIP<br/>mensual" --> CARGA
+    CARGA --> XAMPP
+    CARGA -- "copiar-a-tidb<br/>TLS :4000" --> BD

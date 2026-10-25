@@ -1,0 +1,60 @@
+flowchart TB
+    subgraph FRONT["Front (navegador)"]
+        HTML["impo.html + impo.js<br/>(pestañas, matriz, login)"]
+        CHART["Chart.js"]
+        HTML --> CHART
+    end
+
+    subgraph API["API REST · Node.js + Express"]
+        APP["app.js"]
+        subgraph RUT["Rutas"]
+            R1["/api/auth"]
+            R2["/api/impo"]
+            R3["/api/consultas"]
+        end
+        subgraph MW["Middlewares"]
+            AUTH["auth.js<br/>(JWT, roles)"]
+            ERR["errors.js"]
+        end
+        subgraph CTRL["Controladores"]
+            C1["auth.controller"]
+            C2["impo.controller"]
+            C3["consultas.controller"]
+        end
+        subgraph MOD["Modelos"]
+            M1["usuarios.model"]
+            M2["impo.model<br/>(caché de matriz)"]
+            M3["consultas.model"]
+        end
+        SQLS[("consultas/*.sql<br/>guardadas")]
+        POOL["config/db.js<br/>pool mysql2 + TLS"]
+        APP --> RUT
+        R1 & R2 & R3 --> AUTH
+        R1 --> C1 --> M1
+        R2 --> C2 --> M2
+        R3 --> C3 --> M3 --> SQLS
+        M1 & M2 & M3 --> POOL
+        APP --> ERR
+    end
+
+    subgraph CARGA["Carga de datos · Node.js"]
+        K1["crear-base.js"]
+        K2["importar-kit.js<br/>(Kit.mdb)"]
+        K3["cargar-mes.js"]
+        K4["copiar-a-tidb.js"]
+        LIB["lib: lector-lst,<br/>pasos-mes, conexion"]
+        K3 --> LIB
+    end
+
+    LOCAL[("MariaDB local<br/>base de trabajo")]
+    NUBE[("TiDB Cloud<br/>base de consulta")]
+    ZIP[/"ZIP mensual ARCA"/]
+    MDBK[/"Kit.mdb"/]
+
+    HTML -- "HTTPS + JSON<br/>Bearer JWT" --> APP
+    POOL -- "MySQL/TLS :4000" --> NUBE
+    ZIP --> K3
+    MDBK --> K2
+    K1 & K2 & K3 --> LOCAL
+    K4 -- "lee" --> LOCAL
+    K4 -- "escribe" --> NUBE

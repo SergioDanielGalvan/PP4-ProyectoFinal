@@ -1,0 +1,38 @@
+sequenceDiagram
+    autonumber
+    actor U as Usuario
+    participant F as Front (navegador)
+    participant R as API · /api/auth
+    participant C as auth.controller
+    participant M as usuarios.model
+    participant DB as TiDB Cloud
+
+    U->>F: usuario y clave
+    F->>R: POST /api/auth/login {usuario, clave}
+    R->>C: login()
+    C->>C: ¿5 fallos en 15 min? → 429
+    C->>M: buscarParaLogin(usuario)
+    M->>DB: SELECT ... FROM usuarios WHERE Usuario = ?
+    DB-->>M: fila con ClaveHash, Rol, Activo
+    M-->>C: usuario
+    C->>C: bcrypt.compare(clave, ClaveHash)
+    alt clave incorrecta o usuario inactivo
+        C-->>F: 401 Usuario o clave incorrectos
+    else correcta
+        C->>M: registrarIngreso(id)
+        M->>DB: UPDATE usuarios SET UltimoIngreso = NOW()
+        C->>C: firmar JWT (HS256, 8 h, sub, rol)
+        C-->>F: 200 {token, usuario}
+        F->>F: guarda el token
+    end
+
+    Note over F,DB: Pedidos siguientes
+    F->>R: GET /api/impo/matriz · Authorization: Bearer token
+    R->>R: requireAuth: verificar firma y vencimiento
+    R->>M: buscarPorId(sub) (caché 1 min)
+    M->>DB: SELECT Rol, Activo
+    alt token vencido, inválido o usuario desactivado
+        R-->>F: 401 → el front vuelve a pedir login
+    else válido
+        R-->>F: 200 datos
+    end

@@ -1,0 +1,118 @@
+erDiagram
+    CARATULA ||--|{ ITEM : "tiene"
+    ITEM ||--o{ LIQ : "liquida"
+    IMPORTADORES ||--o{ CARATULA : "importa"
+    POSICION ||--o{ ITEM : "clasifica"
+    CAPITULO ||--o{ POSICION : "agrupa"
+    SECCION ||--|{ CAPITULO : "agrupa"
+    DESTINACIONES ||--o{ CARATULA : "tipo de operacion"
+    GRUPO_DESTINACION |o--|| DESTINACIONES : "agrupa (excepciones)"
+    GRUPO ||--o{ GRUPO_DESTINACION : "contiene"
+    ADUANAS ||--o{ CARATULA : "oficializa"
+    PAISES ||--o{ ITEM : "origen / procedencia"
+    DIVISAS ||--o{ CARATULA : "moneda FOB"
+    VIA ||--o{ CARATULA : "medio de transporte"
+    UNIDADESMEDIDA ||--o{ ITEM : "unidad"
+    TASAS ||--o{ LIQ : "concepto"
+
+    CARATULA {
+        int IdOperacion PK
+        mediumint Periodo PK "AAAAMM, particion"
+        varchar NroAduana UK "16 car. con verificador"
+        char Destinacion "derivado de NroAduana"
+        char AduanaOficializacion "derivado de NroAduana"
+        mediumint IdImportador FK
+        char PaisProcedencia FK
+        char Via FK
+        char DivisaFOB FK
+        decimal FobTotalDivisas
+    }
+    ITEM {
+        int IdOperacion PK
+        smallint Item PK
+        mediumint Periodo PK
+        smallint IdPosicion FK
+        char PaisOrigen FK
+        char PaisProcedencia FK
+        char UnidadMedida FK
+        decimal CantidadUnidades
+        decimal FobTotalDolares
+        decimal ValorUnitario "calculado"
+    }
+    LIQ {
+        int IdOperacion PK
+        smallint Item PK
+        char Codigo PK
+        mediumint Periodo PK
+        decimal Monto "USD"
+    }
+    IMPORTADORES {
+        mediumint IdImportador PK
+        varchar Nombre UK
+        mediumint IdCanonico
+    }
+    POSICION {
+        smallint IdPosicion PK
+        varchar PosicionSIM UK "NCM 8 digitos"
+        char Capitulo "calculado"
+        char Partida "calculado"
+        text DescripcionNCM
+        decimal PorcientoDerechoImpoExtra
+        decimal PorcientoIVA
+    }
+    CAPITULO {
+        char Codigo PK
+        varchar Seccion FK
+        varchar Descrip
+    }
+    SECCION {
+        varchar Codigo PK "I a XXI"
+        tinyint Numero
+        varchar Descrip
+    }
+    GRUPO {
+        varchar Codigo PK
+        varchar Descrip
+        tinyint PorDefecto
+    }
+    GRUPO_DESTINACION {
+        char Destinacion PK
+        varchar Grupo FK
+    }
+    DESTINACIONES {
+        char Codigo PK
+        varchar Descrip
+    }
+    ADUANAS {
+        char Codigo PK
+        varchar Descrip
+    }
+    PAISES {
+        char Codigo PK
+        varchar Descrip
+    }
+    DIVISAS {
+        char Codigo PK
+        varchar Descrip
+    }
+    VIA {
+        char Codigo PK
+        varchar Descrip
+    }
+    UNIDADESMEDIDA {
+        char Codigo PK
+        varchar Descrip
+    }
+    TASAS {
+        char Codigo PK
+        varchar Descrip
+    }
+    USUARIOS {
+        int IdUsuario PK
+        varchar Usuario UK
+        varchar Nombre
+        varchar ClaveHash "bcrypt"
+        varchar Rol "admin | consulta"
+        tinyint Activo
+        datetime UltimoIngreso
+    }

@@ -1,0 +1,19 @@
+stateDiagram-v2
+    [*] --> Descargado: ZIP de ARCA
+    Descargado --> EnStaging: lectura por lotes
+    EnStaging --> Rechazado: período no coincide
+    Rechazado --> Descargado: archivo correcto
+    EnStaging --> Validado: controles en el informe
+    Validado --> CargadoLocal: carga en MariaDB
+    CargadoLocal --> Publicado: copiar-a-tidb
+    Publicado --> Desactualizado: recarga en MariaDB
+    Desactualizado --> Publicado: copiar --reemplazar
+    Publicado --> [*]
+    note right of Validado
+        Los controles marcan ok o REVISAR
+        y no frenan la carga.
+    end note
+    note right of CargadoLocal
+        Recargar el mes reemplaza
+        su partición completa.
+    end note

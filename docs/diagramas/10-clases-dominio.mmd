@@ -1,0 +1,92 @@
+classDiagram
+    direction LR
+    class Despacho {
+        +int idOperacion
+        +int periodo
+        +string nroAduana
+        +string destinacion
+        +string aduana
+        +string paisProcedencia
+        +string divisaFOB
+        +decimal fobTotalDivisas
+        +digitoVerificador() char
+        +esValido() bool
+        +items() Item[]
+    }
+    class Item {
+        +int numero
+        +string paisOrigen
+        +string unidadMedida
+        +decimal cantidad
+        +decimal fobDolares
+        +valorUnitario() decimal
+        +esTriangulacion() bool
+    }
+    class Liquidacion {
+        +string concepto
+        +decimal montoUSD
+    }
+    class Importador {
+        +int id
+        +string nombre
+        +int idCanonico
+    }
+    class PosicionNCM {
+        +string ncm
+        +string capitulo
+        +string partida
+        +string descripcion
+        +decimal derechoImpo
+    }
+    class Capitulo {
+        +string codigo
+        +string descripcion
+    }
+    class Seccion {
+        +string codigo
+        +string descripcion
+    }
+    class Destinacion {
+        +string codigo
+        +string descripcion
+        +grupo() GrupoOperacion
+    }
+    class GrupoOperacion {
+        <<enumeration>>
+        CONSUMO
+        TEMP
+        ZF
+        REDES
+        AAE
+    }
+    class Usuario {
+        +int id
+        +string usuario
+        +string nombre
+        +Rol rol
+        +bool activo
+        +verificarClave(clave) bool
+        +cambiarClave(actual, nueva)
+    }
+    class Rol {
+        <<enumeration>>
+        admin
+        consulta
+    }
+    class ConsultaGuardada {
+        +string nombre
+        +string titulo
+        +Parametro[] parametros
+        +ejecutar(valores) Resultado
+    }
+
+    Importador "1" --> "*" Despacho : importa
+    Despacho "1" *-- "1..*" Item : contiene
+    Item "1" *-- "*" Liquidacion : liquida
+    Item "*" --> "1" PosicionNCM : se clasifica en
+    PosicionNCM "*" --> "1" Capitulo
+    Capitulo "*" --> "1" Seccion
+    Despacho "*" --> "1" Destinacion
+    Destinacion ..> GrupoOperacion
+    Usuario ..> Rol
+    Usuario ..> ConsultaGuardada : ejecuta

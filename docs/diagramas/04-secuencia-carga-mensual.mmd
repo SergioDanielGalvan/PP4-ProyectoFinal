@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor O as Operador
+    participant CM as cargar-mes.js
+    participant L as lector-lst (ZIP)
+    participant MDB as MariaDB local
+    participant CT as copiar-a-tidb.js
+    participant T as TiDB Cloud
+
+    O->>CM: node cargar-mes.js impo_AAAAMM.zip
+    CM->>MDB: controlar base y KIT
+    CM->>L: abrir ZIP (lectura tolerante)
+    loop lotes de 500.000 líneas
+        L-->>CM: líneas limpias (sin encabezados ni relleno)
+        CM->>MDB: LOAD DATA LOCAL INFILE → stg_impo
+    end
+    CM->>MDB: ¿un solo período y coincide con el nombre?
+    alt no coincide
+        CM-->>O: error, no se carga
+    end
+    CM->>MDB: validaciones (b … i)
+    MDB-->>CM: ok / REVISAR por control
+    CM->>MDB: importadores y posiciones nuevas
+    CM->>MDB: preparar partición del período
+    CM->>MDB: INSERT carátula, ítem, liq
+    CM-->>O: informe impo_AAAAMM.md
+
+    O->>CT: node copiar-a-tidb.js --periodos AAAAMM
+    loop bloques de IdOperacion
+        CT->>MDB: SELECT bloque
+        CT->>T: INSERT IGNORE (lotes de 5.000, 3 en paralelo, TLS)
+    end
+    CT->>MDB: COUNT(*) por tabla
+    CT->>T: COUNT(*) por tabla
+    CT-->>O: control de cantidades: ok / diferencia

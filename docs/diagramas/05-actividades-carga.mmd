@@ -1,0 +1,24 @@
+flowchart TD
+    A([Inicio]) --> B[Descargar ZIP mensual de ARCA]
+    B --> D[Leer impo_AAAAMM.lst desde el ZIP]
+    D --> E[Limpiar líneas:<br/>quitar encabezados y relleno]
+    E --> F[Enviar a staging por lotes]
+    F --> C{¿Un solo período y coincide<br/>con el nombre del archivo?}
+    C -- No --> X1[Cancelar la carga] --> Z1([Fin])
+    C -- Sí --> G[Validaciones: verificador del NroAduana,<br/>unicidad, FOB vs factura, códigos del KIT]
+    G --> G2[Marcar en el informe cada control<br/>como ok o REVISAR]
+    G2 --> H{¿Modo --validar?}
+    H -- Sí --> X2[Informe del mes] --> Z2([Fin sin cargar])
+    H -- No --> I[Alta de importadores y posiciones nuevas]
+    I --> J[Crear o reemplazar partición del mes]
+    J --> K[Cargar carátula, ítem y liquidación]
+    K --> L[Informe del mes con validaciones y totales]
+    L --> M{¿Se publica en la nube?}
+    M -- No --> Z3([Fin: solo local])
+    M -- Sí --> N{¿El mes ya estaba en TiDB<br/>con otra carga?}
+    N -- Sí --> O[Borrar el mes en TiDB<br/>--reemplazar]
+    N -- No --> P
+    O --> P[Copiar por bloques a TiDB]
+    P --> Q{¿Cantidades iguales<br/>MariaDB = TiDB?}
+    Q -- No --> P
+    Q -- Sí --> R([Fin: mes publicado])

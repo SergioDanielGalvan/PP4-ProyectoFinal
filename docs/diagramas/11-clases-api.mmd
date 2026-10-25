@@ -1,0 +1,81 @@
+classDiagram
+    direction TB
+    class AuthMiddleware {
+        +requireAuth(req, res, next)
+        +requireLogin(req, res, next)
+        +requireRol(...roles)
+        +firmarToken(usuario) string
+        -usuarioVigente(id) Usuario
+    }
+    class AuthController {
+        +login(req, res)
+        +yo(req, res)
+        +cambiarClave(req, res)
+        +listarUsuarios(req, res)
+        +crearUsuario(req, res)
+        +modificarUsuario(req, res)
+        -controlarIntentos(clave)
+    }
+    class ImpoController {
+        +periodos()
+        +matriz()
+        +listarDespachos()
+        +obtenerDespacho()
+        +resumenSubpartidas()
+        +preciosPorNcm()
+        +valoresBajos()
+        +buscarImportadores()
+        +triangulaciones()
+    }
+    class ConsultasController {
+        +listar()
+        +ejecutar()
+        +sqlLibre()
+    }
+    class UsuariosModel {
+        +buscarParaLogin(usuario)
+        +buscarPorId(id)
+        +listar()
+        +crear(datos)
+        +actualizar(id, cambios)
+        +registrarIngreso(id)
+    }
+    class ImpoModel {
+        -cachePeriodos
+        -cacheMatriz
+        +listarPeriodos()
+        +matriz(nivel, seccion, grupos)
+        +obtenerDespacho(nro)
+        +listarDespachos(filtros)
+        +resumenSubpartidas(rango)
+    }
+    class ConsultasModel {
+        -LIMITE_FILAS = 5000
+        -TIEMPO_MAX_SEG = 30
+        +listarGuardadas()
+        +ejecutarGuardada(nombre, valores)
+        +ejecutarLibre(sql, limite)
+        -validarSqlLibre(sql)
+        -ejecutarAcotado(sql, params, limite)
+    }
+    class Pool {
+        <<mysql2>>
+        +query(sql, params)
+        +getConnection()
+    }
+    class HttpError {
+        +int status
+        +string message
+    }
+
+    AuthController --> UsuariosModel
+    AuthController --> AuthMiddleware : firmarToken
+    AuthMiddleware --> UsuariosModel
+    ImpoController --> ImpoModel
+    ConsultasController --> ConsultasModel
+    UsuariosModel --> Pool
+    ImpoModel --> Pool
+    ConsultasModel --> Pool
+    AuthController ..> HttpError
+    ImpoController ..> HttpError
+    ConsultasModel ..> HttpError

@@ -1,0 +1,34 @@
+flowchart LR
+    consulta(["👤 Usuario consulta<br/>(despachante, analista)"])
+    admin(["👤 Administrador"])
+    operador(["👤 Operador de datos"])
+    arca(["🏛️ ARCA<br/>(sistema externo)"])
+
+    subgraph sistema["Sistema de Estadísticas de Importación"]
+        direction TB
+        UC1(["Iniciar sesión"])
+        UC2(["Consultar despacho"])
+        UC3(["Resumen por subpartidas NCM"])
+        UC4(["Comparar precios por NCM<br/>y detectar valores bajos"])
+        UC5(["Buscar importadores"])
+        UC6(["Ver triangulaciones"])
+        UC7(["Ver matriz de importaciones<br/>(secciones y capítulos)"])
+        UC8(["Ejecutar consulta predefinida"])
+        UC9(["Cambiar clave"])
+        UC10(["Administrar usuarios"])
+        UC11(["Ejecutar SQL libre<br/>(solo lectura)"])
+        UC12(["Cargar mes de ARCA"])
+        UC13(["Validar datos del mes"])
+        UC14(["Publicar mes en la nube"])
+        UC15(["Actualizar KIT<br/>(tablas de referencia)"])
+    end
+
+    consulta --- UC1 & UC2 & UC3 & UC4 & UC5 & UC6 & UC7 & UC8 & UC9
+    admin --- UC10 & UC11
+    admin -. "hereda" .-> consulta
+    operador --- UC12 & UC14 & UC15
+    arca --- UC12
+    UC12 -. "«include»" .-> UC13
+    NOTA["Todos los casos de uso de consulta y de administración<br/>«incluyen» Iniciar sesión (token JWT válido)"]
+    UC1 -.- NOTA
+    style NOTA fill:#fff8dc,stroke:#b8a34a,stroke-dasharray: 4 3
