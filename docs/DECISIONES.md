@@ -69,6 +69,8 @@ y del ítem. Se separan en tres niveles para no repetirlos.
   jurisdicción). Verificado con 26001IC04147748D de 202607: sus dos ítems
   suman 1.301,80, igual al FOB total. Los ítems y conceptos que faltaban en
   la primera muestra eran porque la muestra tenía líneas salteadas.
+- El archivo plano es generado con un sentencia SQL que en caso de no existir datos en Liq, se elimina el Item y queda alterada la secuencia.
+  Es un fallo al tomar un Join simple. Todos los despachos tienen una secuencia 1.., i..., n Items sin huecos.
 
 ### Procedencia que varía dentro de un despacho
 
