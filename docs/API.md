@@ -37,11 +37,15 @@ fetch(`${API}/impo/periodos`, { headers: { Authorization: `Bearer ${localStorage
 | `GET /auth/usuarios` | admin | | lista de usuarios (sin claves) |
 | `POST /auth/usuarios` | admin | `usuario`, `nombre`, `clave`, `rol` (`admin`/`consulta`) | usuario creado (201) |
 | `PATCH /auth/usuarios/:id` | admin | cualquiera de `nombre`, `rol`, `activo`, `clave` | usuario modificado |
+| `DELETE /auth/usuarios/:id` | admin | | `{ ok, eliminado }`. Sólo usuarios que nunca ingresaron; si ya ingresó, 409 (desactivarlo con `PATCH activo: false`) |
 
 - Roles: **consulta** (ve los datos) y **admin** (además administra usuarios y
   puede ejecutar SQL libre).
-- Los usuarios no se borran: se desactivan (`activo: false`). Un usuario
-  desactivado deja de poder usar su token en menos de un minuto.
+- Un usuario que nunca ingresó se puede eliminar. Uno que ya ingresó se
+  desactiva (`activo: false`), para conservar el historial; deja de poder usar
+  su token en menos de un minuto.
+- Nadie puede eliminarse ni desactivarse a sí mismo, y siempre queda al menos
+  un administrador activo.
 - Login: 5 intentos fallidos seguidos bloquean ese usuario desde esa IP por 15 minutos (429).
 - El token dura 8 horas (configurable con `JWT_EXPIRA`).
 
@@ -74,6 +78,7 @@ En `/ncm/:ncm/...`, `:ncm` es un código completo: partida (`8471`), subpartida 
 Filtros de Precios (todos opcionales, se combinan):
 
 - `desde` / `hasta` (AAAAMM): rango de períodos; si viene, reemplaza a `periodo`.
+- `origenes`: códigos de país de **origen** separados por coma (`310`).
 - `region`: primer dígito del código de país de **procedencia** (1 África, 2 América, 3 Asia, 4 Europa, 5 Oceanía, 7 varios, 9 indeterminado).
 - `paises`: códigos de país de procedencia separados por coma (`310,225`).
 - `aduanas`: códigos de aduana de oficialización separados por coma (`001,073`).

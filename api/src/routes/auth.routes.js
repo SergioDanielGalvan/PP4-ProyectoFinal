@@ -11,5 +11,6 @@ router.post('/clave', requireLogin, ctrl.cambiarClave);
 router.get('/usuarios', requireRol('admin'), ctrl.listarUsuarios);
 router.post('/usuarios', requireRol('admin'), ctrl.crearUsuario);
 router.patch('/usuarios/:id', requireRol('admin'), ctrl.modificarUsuario);
+router.delete('/usuarios/:id', requireRol('admin'), ctrl.eliminarUsuario);
 
 module.exports = router;

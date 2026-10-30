@@ -45,9 +45,17 @@ async function registrarIngreso(id) {
   await pool.query('UPDATE usuarios SET UltimoIngreso = NOW() WHERE IdUsuario = ?', [id]);
 }
 
+// Borra sólo usuarios que nunca ingresaron (altas por error o de prueba).
+// Devuelve true si borró. Los que ya ingresaron se desactivan: así queda
+// registro de quién tuvo acceso.
+async function eliminar(id) {
+  const [r] = await pool.query('DELETE FROM usuarios WHERE IdUsuario = ? AND UltimoIngreso IS NULL', [id]);
+  return r.affectedRows === 1;
+}
+
 async function contarAdminsActivos() {
   const [[{ n }]] = await pool.query("SELECT COUNT(*) AS n FROM usuarios WHERE Rol = 'admin' AND Activo = 1");
   return Number(n);
 }
 
-module.exports = { buscarParaLogin, buscarPorId, listar, crear, actualizar, registrarIngreso, contarAdminsActivos };
+module.exports = { buscarParaLogin, buscarPorId, listar, crear, actualizar, eliminar, registrarIngreso, contarAdminsActivos };

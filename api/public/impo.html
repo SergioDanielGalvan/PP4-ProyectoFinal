@@ -120,6 +120,10 @@
       <button class="nav-link" role="tab" aria-selected="false" data-panel="p-matriz">
         <i class="bi bi-bar-chart-fill me-1"></i> Matriz
       </button>
+      <!-- Sólo se muestra a los administradores -->
+      <button class="nav-link" role="tab" aria-selected="false" data-panel="p-usuarios" id="tab-usuarios" hidden>
+        <i class="bi bi-people-fill me-1"></i> Usuarios
+      </button>
     </nav>
 
     <!-- Contenido Principal -->
@@ -215,7 +219,11 @@
               </div>
               <!-- Filtros: procedencia (región o país), aduana y rango de períodos -->
               <div class="row g-2 align-items-end mt-1" id="filtros-ncm">
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-3">
+                  <label for="fn-origen" class="form-label small fw-semibold text-secondary">País de origen</label>
+                  <select id="fn-origen" class="form-select form-select-sm"><option value="">Todos</option></select>
+                </div>
+                <div class="col-6 col-md-3">
                   <label for="fn-region" class="form-label small fw-semibold text-secondary">Región de procedencia</label>
                   <select id="fn-region" class="form-select form-select-sm"><option value="">Todas</option></select>
                 </div>
@@ -227,15 +235,15 @@
                   <label for="fn-aduana" class="form-label small fw-semibold text-secondary">Aduana</label>
                   <select id="fn-aduana" class="form-select form-select-sm"><option value="">Todas</option></select>
                 </div>
-                <div class="col-3 col-md-2">
+                <div class="col-6 col-md-2">
                   <label for="fn-desde" class="form-label small fw-semibold text-secondary">Desde</label>
                   <select id="fn-desde" class="form-select form-select-sm"><option value="">—</option></select>
                 </div>
-                <div class="col-3 col-md-2">
+                <div class="col-6 col-md-2">
                   <label for="fn-hasta" class="form-label small fw-semibold text-secondary">Hasta</label>
                   <select id="fn-hasta" class="form-select form-select-sm"><option value="">—</option></select>
                 </div>
-                <div class="col-12">
+                <div class="col-12 col-md-8">
                   <p class="form-text mb-0">Sin rango, vale el período de arriba. Las alertas de valores bajos revisan sólo los ítems que pasan los filtros, comparados con el promedio de todo el mercado de su NCM.</p>
                 </div>
               </div>
@@ -330,7 +338,88 @@
         </div>
         <div id="r-matriz"></div>
       </section>
+
+      <!-- Panel Usuarios (sólo administradores) -->
+      <section id="p-usuarios" class="panel" hidden>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <h2 class="h4 mb-1">Usuarios del sistema</h2>
+            <p class="text-secondary small mb-0">Alta, modificación y baja. Un usuario que ya ingresó no se elimina: se desactiva, para conservar el historial.</p>
+          </div>
+          <button type="button" class="btn btn-primary" id="u-nuevo"><i class="bi bi-person-plus me-1"></i> Nuevo usuario</button>
+        </div>
+        <div id="u-mensaje"></div>
+        <div id="r-usuarios"></div>
+      </section>
     </main>
+  </div>
+
+  <!-- Alta y edición de usuario -->
+  <div class="modal fade" id="m-usuario" tabindex="-1" aria-labelledby="mu-titulo" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="f-usuario" novalidate>
+        <div class="modal-header">
+          <h5 class="modal-title" id="mu-titulo">Nuevo usuario</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="mu-id">
+          <div class="mb-3">
+            <label for="mu-usuario" class="form-label small fw-semibold">Usuario</label>
+            <input id="mu-usuario" class="form-control" maxlength="40" autocomplete="off" spellcheck="false" required>
+            <div class="form-text">De 3 a 40 caracteres: letras, números, punto, guion o guion bajo. No se puede cambiar después.</div>
+            <div class="invalid-feedback" id="mu-usuario-error"></div>
+          </div>
+          <div class="mb-3">
+            <label for="mu-nombre" class="form-label small fw-semibold">Nombre y apellido</label>
+            <input id="mu-nombre" class="form-control" maxlength="80" required>
+            <div class="invalid-feedback">El nombre es obligatorio.</div>
+          </div>
+          <div class="mb-3">
+            <label for="mu-rol" class="form-label small fw-semibold">Rol</label>
+            <select id="mu-rol" class="form-select">
+              <option value="consulta">Consulta: ve los datos</option>
+              <option value="admin">Administrador: además gestiona usuarios y ejecuta SQL</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="mu-clave" class="form-label small fw-semibold" id="mu-clave-label">Clave</label>
+            <div class="input-group">
+              <input id="mu-clave" class="form-control font-monospace" maxlength="72" autocomplete="new-password">
+              <button type="button" class="btn btn-outline-secondary" id="mu-generar">Generar</button>
+            </div>
+            <div class="form-text" id="mu-clave-ayuda">Al menos 10 caracteres. Anotala antes de guardar: después no se puede ver.</div>
+            <div class="text-danger small mt-1" id="mu-clave-error" hidden></div>
+          </div>
+          <div class="form-check" id="mu-activo-caja" hidden>
+            <input class="form-check-input" type="checkbox" id="mu-activo">
+            <label class="form-check-label" for="mu-activo">Activo (puede ingresar)</label>
+          </div>
+          <div class="alert alert-danger py-2 small mt-3 mb-0" id="mu-error" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="mu-guardar">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Confirmación de eliminación -->
+  <div class="modal fade" id="m-confirmar" tabindex="-1" aria-labelledby="mc-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="mc-titulo">Eliminar usuario</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body" id="mc-texto"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-danger" id="mc-aceptar">Eliminar</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Diálogo Modal de Login -->

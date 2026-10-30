@@ -134,9 +134,32 @@ const modificarUsuario = handler(async (req, res) => {
     throw new HttpError(400, 'Es el único administrador activo: creá otro antes de quitarle el rol o desactivarlo.');
   }
 
+  if (pierdeAdmin && actual.id === req.usuario.id) {
+    throw new HttpError(400, 'No podés quitarte el rol de administrador ni desactivarte a vos mismo.');
+  }
+  if (cambios.nombre === '') throw new HttpError(400, 'El nombre no puede quedar vacío.');
+
   const resultado = await usuarios.actualizar(id, cambios);
   olvidarUsuario(id);
   res.json(resultado);
 });
 
-module.exports = { login, yo, cambiarClave, listarUsuarios, crearUsuario, modificarUsuario, hashear, claveValida, nombreUsuario, rolValido };
+// Elimina un usuario que nunca ingresó. Si ya ingresó, responde 409 y el
+// front ofrece desactivarlo: el historial de accesos no se pierde.
+const eliminarUsuario = handler(async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const actual = Number.isInteger(id) ? await usuarios.buscarPorId(id) : null;
+  if (!actual) throw new HttpError(404, 'No existe ese usuario.');
+  if (actual.id === req.usuario.id) throw new HttpError(400, 'No podés eliminar tu propio usuario.');
+  if (actual.rol === 'admin' && actual.activo && (await usuarios.contarAdminsActivos()) <= 1) {
+    throw new HttpError(400, 'Es el único administrador activo: no se puede eliminar.');
+  }
+  if (actual.ultimo_ingreso) {
+    throw new HttpError(409, `${actual.usuario} ya ingresó al sistema: para conservar el historial no se elimina, se desactiva.`);
+  }
+  await usuarios.eliminar(id);
+  olvidarUsuario(id);
+  res.json({ ok: true, eliminado: actual.usuario });
+});
+
+module.exports = { login, yo, cambiarClave, listarUsuarios, crearUsuario, modificarUsuario, eliminarUsuario, hashear, claveValida, nombreUsuario, rolValido };

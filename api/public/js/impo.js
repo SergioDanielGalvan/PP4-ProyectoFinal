@@ -21,20 +21,29 @@ const CLAVE_TOKEN = 'comex_token';
 const leerToken = () => { try { return localStorage.getItem(CLAVE_TOKEN); } catch { return null; } };
 const guardarToken = (t) => { try { t ? localStorage.setItem(CLAVE_TOKEN, t) : localStorage.removeItem(CLAVE_TOKEN); } catch { /* sin storage */ } };
 let tokenEnMemoria = leerToken();
+let usuarioActual = null;
 let loginPendiente = null;
 
 function mostrarSesion(usuario) {
+  // La pestaña Usuarios sólo existe para administradores (la API igual lo controla)
+  $('#tab-usuarios').hidden = !(usuario && usuario.rol === 'admin');
+  usuarioActual = usuario || null;
   const s = $('#sesion');
-  if (!usuario) { s.hidden = true; s.innerHTML = ''; return; }
   s.hidden = false;
-  s.innerHTML = `${esc(usuario.nombre || usuario.usuario)} · <button type="button" id="salir">Salir</button>`;
+  // Sin sesión se ofrece ingresar: con AUTH_ENABLED=false las consultas
+  // andan sin login, pero la administración de usuarios lo necesita
+  s.innerHTML = usuario
+    ? `<span>${esc(usuario.nombre || usuario.usuario)}</span> <button type="button" class="btn btn-sm btn-outline-light" id="salir">Salir</button>`
+    : '<button type="button" class="btn btn-sm btn-outline-light" id="ingresar">Ingresar</button>';
 }
 
 function pedirLogin() {
   if (loginPendiente) return loginPendiente;
-  loginPendiente = new Promise((resolve) => {
+  loginPendiente = new Promise((resolve, reject) => {
     const dialogo = $('#login');
     $('#l-error').hidden = true;
+    // Escape cierra el diálogo: el pedido que esperaba el login falla con un mensaje
+    dialogo.oncancel = () => { loginPendiente = null; reject(new Error('Hace falta iniciar sesión para ver esto.')); };
     dialogo.showModal();
     $('#f-login').onsubmit = async (e) => {
       e.preventDefault();
@@ -58,6 +67,7 @@ function pedirLogin() {
 }
 
 $('#sesion').addEventListener('click', (e) => {
+  if (e.target.id === 'ingresar') { pedirLogin().catch(() => {}); return; }
   if (e.target.id !== 'salir') return;
   tokenEnMemoria = null;
   guardarToken(null);
@@ -80,10 +90,32 @@ async function api(ruta, params = {}, reintento = true) {
   return data;
 }
 
+// POST, PATCH y DELETE contra /api (por ejemplo /auth/usuarios). Igual que
+// api(): ante un 401 pide login y repite el pedido una vez.
+async function enviar(metodo, ruta, cuerpo, reintento = true) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (tokenEnMemoria) headers.Authorization = `Bearer ${tokenEnMemoria}`;
+  const resp = await fetch(`/api${ruta}`, { method: metodo, headers, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
+  if (resp.status === 401 && reintento) {
+    tokenEnMemoria = null;
+    guardarToken(null);
+    await pedirLogin();
+    return enviar(metodo, ruta, cuerpo, false);
+  }
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const error = new Error(data.error || `Error ${resp.status}`);
+    error.status = resp.status;
+    throw error;
+  }
+  return data;
+}
+
 // Si ya hay un token guardado, mostrar quién está conectado
+if (!tokenEnMemoria) mostrarSesion(null);
 if (tokenEnMemoria) {
   fetch('/api/auth/yo', { headers: { Authorization: `Bearer ${tokenEnMemoria}` } })
-    .then((r) => (r.ok ? r.json() : null)).then((u) => { if (u) mostrarSesion(u); else { tokenEnMemoria = null; guardarToken(null); } })
+    .then((r) => (r.ok ? r.json() : null)).then((u) => { if (u) mostrarSesion(u); else { tokenEnMemoria = null; guardarToken(null); mostrarSesion(null); } })
     .catch(() => {});
 }
 
@@ -108,6 +140,7 @@ document.querySelectorAll('[role="tab"]').forEach((tab) => {
     document.querySelectorAll('.panel').forEach((p) => { p.hidden = p.id !== tab.dataset.panel; });
     if (tab.dataset.panel === 'p-triangulaciones') cargarTriangulaciones();
     if (tab.dataset.panel === 'p-matriz' && !matrizEstado.cargada) cargarMatriz();
+    if (tab.dataset.panel === 'p-usuarios') cargarUsuarios();
   });
 });
 
@@ -436,6 +469,7 @@ function cargarFiltrosNcm() {
     $('#fn-region').insertAdjacentHTML('beforeend', opciones(c.regiones, (r) => r.nombre));
     $('#fn-aduana').insertAdjacentHTML('beforeend', opciones(c.aduanas, (a) => `${a.descrip} (${a.codigo})`));
     const paises = c.paises;
+    $('#fn-origen').insertAdjacentHTML('beforeend', opciones(paises, (p) => `${p.descrip} (${p.codigo})`));
     const llenarPaises = () => {
       const region = $('#fn-region').value;
       const elegido = $('#fn-pais').value;
@@ -456,6 +490,7 @@ document.querySelector('[data-panel="p-ncm"]').addEventListener('click', cargarF
 
 function filtrosNcm() {
   return {
+    origenes: $('#fn-origen').value,
     region: $('#fn-region').value,
     paises: $('#fn-pais').value,
     aduanas: $('#fn-aduana').value,
@@ -471,6 +506,7 @@ function textoFiltrosNcm() {
   const partes = [];
   if (f.desde || f.hasta) partes.push(`Períodos ${f.desde ? mes(f.desde) : 'inicio'} a ${f.hasta ? mes(f.hasta) : 'último'}`);
   else partes.push(`Período ${periodo() ? mes(periodo()) : 'todos'}`);
+  if (f.origenes) partes.push(`Origen ${sel('#fn-origen')}`);
   if (f.paises) partes.push(`Procedencia ${sel('#fn-pais')}`);
   else if (f.region) partes.push(`Procedencia ${sel('#fn-region')}`);
   if (f.aduanas) partes.push(`Aduana ${sel('#fn-aduana')}`);
@@ -633,7 +669,7 @@ $('#f-ncm').addEventListener('submit', async (e) => {
 
 $('#b-limpiar-ncm').addEventListener('click', () => {
   $('#ncm').value = '';
-  ['#fn-region', '#fn-aduana', '#fn-desde', '#fn-hasta'].forEach((s) => { $(s).value = ''; });
+  ['#fn-origen', '#fn-region', '#fn-aduana', '#fn-desde', '#fn-hasta'].forEach((s) => { $(s).value = ''; });
   $('#fn-region').dispatchEvent(new Event('change'));
   $('#fn-pais').value = '';
   $('#r-ncm').innerHTML = '';
@@ -1308,3 +1344,160 @@ autocompletar($('#ncm'), { minimo: minimoNcm, buscar: buscarNcm, alElegir: () =>
 autocompletar($('#desde'), { minimo: minimoNcm, buscar: buscarNcm });
 autocompletar($('#tr-ncm'), { minimo: minimoNcm, buscar: buscarNcm, alElegir: () => $('#f-tri').requestSubmit() });
 autocompletar($('#hasta'), { minimo: minimoNcm, buscar: buscarNcm });
+
+// ---------- usuarios (CRUD, sólo administradores) ----------
+// Alta, lista, modificación (nombre, rol, clave, activo) y baja. La API sólo
+// elimina usuarios que nunca ingresaron; a los demás los desactiva.
+const fecha = (v) => (v ? new Date(v).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : 'Nunca');
+let listaUsuarios = [];
+
+function avisoUsuarios(texto, tipo = 'success') {
+  $('#u-mensaje').innerHTML = `<div class="alert alert-${tipo} alert-dismissible fade show py-2" role="alert">
+    ${esc(texto)}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button></div>`;
+}
+
+async function cargarUsuarios() {
+  const destino = $('#r-usuarios');
+  try {
+    listaUsuarios = await enviar('GET', '/auth/usuarios');
+    const filas = listaUsuarios.map((u) => {
+      const yo = usuarioActual && u.id === usuarioActual.id;
+      return `<tr class="${u.activo ? '' : 'text-secondary'}">
+        <td class="codigo">${esc(u.usuario)}${yo ? ' <span class="badge text-bg-secondary">vos</span>' : ''}</td>
+        <td>${esc(u.nombre)}</td>
+        <td>${u.rol === 'admin' ? '<span class="badge text-bg-primary">Administrador</span>' : 'Consulta'}</td>
+        <td>${u.activo ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td>
+        <td>${esc(fecha(u.ultimo_ingreso))}</td>
+        <td class="text-end text-nowrap">
+          <button type="button" class="btn btn-sm btn-outline-primary" data-accion="editar" data-id="${u.id}" title="Modificar"><i class="bi bi-pencil"></i> Modificar</button>
+          ${yo ? '' : (u.activo
+            ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-accion="desactivar" data-id="${u.id}">Desactivar</button>`
+            : `<button type="button" class="btn btn-sm btn-outline-success" data-accion="activar" data-id="${u.id}">Activar</button>`)}
+          ${yo || u.ultimo_ingreso ? '' : `<button type="button" class="btn btn-sm btn-outline-danger" data-accion="eliminar" data-id="${u.id}" title="Eliminar"><i class="bi bi-trash"></i> Eliminar</button>`}
+        </td></tr>`;
+    });
+    destino.innerHTML = tabla([
+      { titulo: 'Usuario' }, { titulo: 'Nombre' }, { titulo: 'Rol' }, { titulo: 'Estado' }, { titulo: 'Último ingreso' }, { titulo: '' },
+    ], filas) + `<p class="nota">${listaUsuarios.length} usuarios. Eliminar aparece sólo en los que nunca ingresaron.</p>`;
+  } catch (err) {
+    mensaje(destino, err.status === 403 ? 'Sólo los administradores pueden ver los usuarios.' : err.message, true);
+  }
+}
+
+const modalUsuario = () => bootstrap.Modal.getOrCreateInstance($('#m-usuario'));
+const modalConfirmar = () => bootstrap.Modal.getOrCreateInstance($('#m-confirmar'));
+
+function claveAleatoria() {
+  const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const azar = crypto.getRandomValues(new Uint32Array(14));
+  return [...azar].map((n) => letras[n % letras.length]).join('');
+}
+
+function abrirFormUsuario(u) {
+  const f = $('#f-usuario');
+  f.reset();
+  f.querySelectorAll('.is-invalid').forEach((x) => x.classList.remove('is-invalid'));
+  $('#mu-error').hidden = true;
+  $('#mu-clave-error').hidden = true;
+  $('#mu-id').value = u ? u.id : '';
+  $('#mu-titulo').textContent = u ? `Modificar ${u.usuario}` : 'Nuevo usuario';
+  $('#mu-usuario').value = u ? u.usuario : '';
+  $('#mu-usuario').disabled = Boolean(u);
+  $('#mu-nombre').value = u ? u.nombre : '';
+  $('#mu-rol').value = u ? u.rol : 'consulta';
+  $('#mu-clave-label').textContent = u ? 'Nueva clave (opcional)' : 'Clave';
+  $('#mu-clave-ayuda').textContent = u
+    ? 'Dejala vacía para no cambiarla. Si la cambiás: al menos 10 caracteres, y anotala antes de guardar.'
+    : 'Al menos 10 caracteres. Anotala antes de guardar: después no se puede ver.';
+  $('#mu-activo-caja').hidden = !u;
+  $('#mu-activo').checked = u ? u.activo : true;
+  const yo = u && usuarioActual && u.id === usuarioActual.id;
+  $('#mu-activo').disabled = Boolean(yo);
+  $('#mu-rol').disabled = Boolean(yo);
+  modalUsuario().show();
+}
+
+// Validación en el navegador; la API valida lo mismo (y los duplicados)
+function validarFormUsuario(esAlta) {
+  let ok = true;
+  const marcar = (el, malo) => { el.classList.toggle('is-invalid', malo); if (malo) ok = false; };
+  const usuario = $('#mu-usuario').value.trim().toLowerCase();
+  if (esAlta) {
+    const malo = !/^[a-z0-9._-]{3,40}$/.test(usuario);
+    $('#mu-usuario-error').textContent = usuario ? 'Usuario inválido: de 3 a 40 caracteres, letras, números, punto, guion o guion bajo.' : 'El usuario es obligatorio.';
+    marcar($('#mu-usuario'), malo);
+  }
+  marcar($('#mu-nombre'), !$('#mu-nombre').value.trim());
+  const clave = $('#mu-clave').value;
+  const claveMala = (esAlta && clave.length < 10) || (!esAlta && clave && clave.length < 10);
+  $('#mu-clave-error').textContent = 'La clave tiene que tener al menos 10 caracteres.';
+  $('#mu-clave-error').hidden = !claveMala;
+  marcar($('#mu-clave'), claveMala);
+  return ok;
+}
+
+$('#u-nuevo').addEventListener('click', () => abrirFormUsuario(null));
+$('#mu-generar').addEventListener('click', () => { $('#mu-clave').value = claveAleatoria(); $('#mu-clave').select(); });
+
+$('#f-usuario').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = $('#mu-id').value;
+  if (!validarFormUsuario(!id)) return;
+  const datos = { nombre: $('#mu-nombre').value.trim() };
+  if (!$('#mu-rol').disabled) datos.rol = $('#mu-rol').value;
+  if ($('#mu-clave').value) datos.clave = $('#mu-clave').value;
+  $('#mu-guardar').disabled = true;
+  try {
+    if (id) {
+      if (!$('#mu-activo').disabled) datos.activo = $('#mu-activo').checked;
+      const u = await enviar('PATCH', `/auth/usuarios/${id}`, datos);
+      avisoUsuarios(`Se guardaron los cambios de ${u.usuario}.${datos.clave ? ' La clave nueva ya está vigente.' : ''}`);
+    } else {
+      datos.usuario = $('#mu-usuario').value.trim().toLowerCase();
+      const u = await enviar('POST', '/auth/usuarios', datos);
+      avisoUsuarios(`Se creó el usuario ${u.usuario}. Pasale la clave por un canal privado.`);
+    }
+    modalUsuario().hide();
+    cargarUsuarios();
+  } catch (err) {
+    $('#mu-error').textContent = err.message;   // por ejemplo 409: "Ya existe el usuario ..."
+    $('#mu-error').hidden = false;
+  } finally {
+    $('#mu-guardar').disabled = false;
+  }
+});
+
+let idAEliminar = null;
+$('#r-usuarios').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-accion]');
+  if (!b) return;
+  const u = listaUsuarios.find((x) => x.id === Number(b.dataset.id));
+  if (!u) return;
+  if (b.dataset.accion === 'editar') return abrirFormUsuario(u);
+  if (b.dataset.accion === 'eliminar') {
+    idAEliminar = u.id;
+    $('#mc-texto').innerHTML = `¿Eliminar el usuario <strong>${esc(u.usuario)}</strong> (${esc(u.nombre)})? No se puede deshacer.`;
+    return modalConfirmar().show();
+  }
+  // Activar o desactivar
+  try {
+    const activo = b.dataset.accion === 'activar';
+    await enviar('PATCH', `/auth/usuarios/${u.id}`, { activo });
+    avisoUsuarios(`${u.usuario} quedó ${activo ? 'activo' : 'desactivado'}.`);
+    cargarUsuarios();
+  } catch (err) { avisoUsuarios(err.message, 'danger'); }
+});
+
+$('#mc-aceptar').addEventListener('click', async () => {
+  if (idAEliminar === null) return;
+  try {
+    const r = await enviar('DELETE', `/auth/usuarios/${idAEliminar}`);
+    avisoUsuarios(`Se eliminó el usuario ${r.eliminado}.`);
+  } catch (err) {
+    avisoUsuarios(err.message, err.status === 409 ? 'warning' : 'danger');
+  } finally {
+    idAEliminar = null;
+    modalConfirmar().hide();
+    cargarUsuarios();
+  }
+});

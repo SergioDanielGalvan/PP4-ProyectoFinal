@@ -68,6 +68,7 @@ function filtrosPrecios(q) {
   return {
     periodo: periodoOpcional(q.periodo),
     desde, hasta, region,
+    origenes: listaCodigos(q.origenes, 'origenes'),
     paises: listaCodigos(q.paises, 'paises'),
     aduanas: listaCodigos(q.aduanas, 'aduanas'),
   };

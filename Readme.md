@@ -126,10 +126,10 @@ La guía completa para el front está en [`docs/API.md`](docs/API.md).
 
 1. **MariaDB:** pegar `db/07_usuarios.sql` en la pestaña SQL de phpMyAdmin
    (como root): crea la tabla `usuarios` y le da a `comex_api` permiso de
-   escritura sólo sobre ella.
+   escritura y borrado sólo sobre ella.
 2. **TiDB:** `node copiar-a-tidb.js --esquema` (desde `carga/`) crea la tabla;
    el permiso, en el SQL Editor de TiDB Cloud:
-   `GRANT SELECT, INSERT, UPDATE ON comex.usuarios TO 'prefijo.comex_api';`
+   `GRANT SELECT, INSERT, UPDATE, DELETE ON comex.usuarios TO 'prefijo.comex_api';`
 3. **JWT_SECRET** en `api/.env` y en las variables de Render. Generarla con
    `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"`.
 4. **Primer administrador**, desde `api/` (usa la base de `api/.env`; la

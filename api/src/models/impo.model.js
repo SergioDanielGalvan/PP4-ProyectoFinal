@@ -190,9 +190,11 @@ function filtroPeriodos(alias, f, params) {
   return filtroPeriodo(alias, f.periodo ?? null, params);
 }
 
-// Región y países de procedencia (del ítem) y aduanas de oficialización (de la carátula)
+// Países de origen, región y países de procedencia (del ítem) y aduanas de
+// oficialización (de la carátula)
 function filtroProcedenciaAduana(aliasItem, aliasCaratula, f, params) {
   let sql = '';
+  if (f.origenes?.length) { sql += ` AND ${aliasItem}.PaisOrigen IN (?)`; params.push(f.origenes); }
   if (f.region) { sql += ` AND ${aliasItem}.PaisProcedencia LIKE ?`; params.push(`${f.region}%`); }
   if (f.paises?.length) { sql += ` AND ${aliasItem}.PaisProcedencia IN (?)`; params.push(f.paises); }
   if (f.aduanas?.length) { sql += ` AND ${aliasCaratula}.AduanaOficializacion IN (?)`; params.push(f.aduanas); }
