@@ -58,11 +58,14 @@ const login = handler(async (req, res) => {
   const usuario = String(req.body?.usuario || '').trim().toLowerCase();
   const clave = String(req.body?.clave || '');
   if (!usuario || !clave) throw new HttpError(400, 'Enviá usuario y clave.');
+  res.locals.auditoria = { usuario };   // también se registra si falla
 
   const claveIntentos = `${req.ip}|${usuario}`;
   controlarIntentos(claveIntentos);
 
-  const u = await usuarios.buscarParaLogin(usuario);
+  // Un nombre con caracteres que un usuario no puede tener (ñ, acentos, espacios) no se busca:
+  // falla igual que una clave equivocada (antes daba error 500 por la intercalación ascii)
+  const u = /^[a-z0-9._-]{1,40}$/.test(usuario) ? await usuarios.buscarParaLogin(usuario) : null;
   // Se compara aunque el usuario no exista, para no revelar cuáles existen por el tiempo de respuesta
   const ok = await bcrypt.compare(clave, u ? u.clave_hash : HASH_RELLENO);
   if (!u || !ok || !u.activo) {
@@ -70,8 +73,9 @@ const login = handler(async (req, res) => {
     throw new HttpError(401, 'Usuario o clave incorrectos.');
   }
   fallos.delete(claveIntentos);
+  res.locals.auditoria = { usuario: u.usuario, idUsuario: u.id };
   await usuarios.registrarIngreso(u.id);
-  const token = firmarToken(u);
+  const token = firmarToken(u, usuarios.huellaClave(u.clave_hash));
   res.json({
     token,
     tipo: 'Bearer',
@@ -85,13 +89,25 @@ const yo = handler(async (req, res) => {
   res.json({ id, usuario, nombre, rol, ultimo_ingreso });
 });
 
+// El usuario cambia su propia clave. Las demás sesiones abiertas (otra PC, otro
+// navegador) dejan de valer; esta sigue con el token nuevo que se devuelve.
+// Las claves actuales equivocadas cuentan para el freno de intentos del login.
 const cambiarClave = handler(async (req, res) => {
+  res.locals.auditoria = { detalle: 'cambio de la clave propia' };
   const actual = String(req.body?.actual || '');
   const nueva = claveValida(req.body?.nueva);
+  const claveIntentos = `${req.ip}|${req.usuario.usuario}`;
+  controlarIntentos(claveIntentos);
   const u = await usuarios.buscarParaLogin(req.usuario.usuario);
-  if (!u || !(await bcrypt.compare(actual, u.clave_hash))) throw new HttpError(400, 'La clave actual no es correcta.');
-  await usuarios.actualizar(u.id, { claveHash: await hashear(nueva) });
-  res.json({ ok: true });
+  if (!u || !(await bcrypt.compare(actual, u.clave_hash))) {
+    registrarFallo(claveIntentos);
+    throw new HttpError(400, 'La clave actual no es correcta.');
+  }
+  if (nueva === actual) throw new HttpError(400, 'La clave nueva tiene que ser distinta de la actual.');
+  const hash = await hashear(nueva);
+  await usuarios.actualizar(u.id, { claveHash: hash });
+  olvidarUsuario(u.id);
+  res.json({ ok: true, token: firmarToken(u, usuarios.huellaClave(hash)) });
 });
 
 // ----- administración (sólo rol admin) -----
@@ -107,6 +123,7 @@ const crearUsuario = handler(async (req, res) => {
     claveHash: await hashear(claveValida(req.body?.clave)),
   };
   if (!datos.nombre) throw new HttpError(400, 'Falta el nombre.');
+  res.locals.auditoria = { detalle: `${datos.usuario} (${datos.nombre}), rol ${datos.rol}` };
   try {
     res.status(201).json(await usuarios.crear(datos));
   } catch (err) {
@@ -114,6 +131,16 @@ const crearUsuario = handler(async (req, res) => {
     throw err;
   }
 });
+
+// Texto para la auditoría: "profesor: rol consulta → admin, clave cambiada" (nunca la clave)
+function describirCambios(actual, cambios) {
+  const partes = [];
+  if (cambios.nombre !== undefined && cambios.nombre !== actual.nombre) partes.push(`nombre "${actual.nombre}" → "${cambios.nombre}"`);
+  if (cambios.rol !== undefined && cambios.rol !== actual.rol) partes.push(`rol ${actual.rol} → ${cambios.rol}`);
+  if (cambios.activo !== undefined && cambios.activo !== actual.activo) partes.push(cambios.activo ? 'activado' : 'desactivado');
+  if (cambios.claveHash !== undefined) partes.push('clave cambiada');
+  return `${actual.usuario}: ${partes.join(', ') || 'sin cambios'}`;
+}
 
 // Cambia nombre, rol, activo o clave (reseteo por el admin). No borra usuarios.
 const modificarUsuario = handler(async (req, res) => {
@@ -129,6 +156,7 @@ const modificarUsuario = handler(async (req, res) => {
     cambios.activo = req.body.activo;
   }
   if (req.body?.clave !== undefined) cambios.claveHash = await hashear(claveValida(req.body.clave));
+  res.locals.auditoria = { detalle: describirCambios(actual, cambios) };
 
   // No dejar el sistema sin ningún administrador activo
   const pierdeAdmin = actual.rol === 'admin' && actual.activo
@@ -153,6 +181,7 @@ const eliminarUsuario = handler(async (req, res) => {
   const id = Number.parseInt(req.params.id, 10);
   const actual = Number.isInteger(id) ? await usuarios.buscarPorId(id) : null;
   if (!actual) throw new HttpError(404, 'No existe ese usuario.');
+  res.locals.auditoria = { detalle: `${actual.usuario} (${actual.nombre})` };
   if (actual.id === req.usuario.id) throw new HttpError(400, 'No podés eliminar tu propio usuario.');
   if (actual.rol === 'admin' && actual.activo && (await usuarios.contarAdminsActivos()) <= 1) {
     throw new HttpError(400, 'Es el único administrador activo: no se puede eliminar.');

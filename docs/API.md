@@ -12,8 +12,8 @@ Todas las respuestas son JSON. Los errores tienen siempre la forma
 1. `POST /auth/login` con `{ "usuario": "...", "clave": "..." }`.
 2. La respuesta trae `token`; guardarlo (memoria o `localStorage`).
 3. Mandarlo en cada pedido: `Authorization: Bearer <token>`.
-4. Si una respuesta es **401**, el token venció o el usuario fue desactivado:
-   volver al login.
+4. Si una respuesta es **401**, el token venció, el usuario fue desactivado o
+   su clave cambió: volver al login.
 
 ```js
 const r = await fetch(`${API}/auth/login`, {
@@ -33,7 +33,7 @@ fetch(`${API}/impo/periodos`, { headers: { Authorization: `Bearer ${localStorage
 |---|---|---|---|
 | `POST /auth/login` | todos | `usuario`, `clave` | `{ token, tipo, expira, usuario: { id, usuario, nombre, rol } }` |
 | `GET /auth/yo` | logueado | | `{ id, usuario, nombre, rol, ultimo_ingreso }` |
-| `POST /auth/clave` | logueado | `actual`, `nueva` (mín. 10 caracteres) | `{ ok: true }` |
+| `POST /auth/clave` | logueado | `actual`, `nueva` (10 a 72 caracteres, distinta de la actual) | `{ ok: true, token }`: guardar el token nuevo; los anteriores de ese usuario dejan de valer. Clave actual equivocada: 400 (cuenta para el freno de intentos del login) |
 | `GET /auth/usuarios` | admin | | lista de usuarios (sin claves) |
 | `POST /auth/usuarios` | admin | `usuario`, `nombre`, `clave`, `rol` (`admin`/`consulta`) | usuario creado (201) |
 | `PATCH /auth/usuarios/:id` | admin | cualquiera de `nombre`, `rol`, `activo` (`true`/`false`, sin comillas), `clave` | usuario modificado |
@@ -48,6 +48,10 @@ fetch(`${API}/impo/periodos`, { headers: { Authorization: `Bearer ${localStorage
   un administrador activo.
 - Login: 5 intentos fallidos seguidos bloquean ese usuario desde esa IP por 15 minutos (429).
 - El token dura 8 horas (configurable con `JWT_EXPIRA`).
+- Cuando cambia la clave de un usuario (la cambia él con `POST /auth/clave` o
+  un admin con `PATCH`), todos sus tokens anteriores dejan de valer al momento
+  (401 "La clave cambió: volvé a iniciar sesión."). El token lleva una huella
+  de la clave vigente, no la clave.
 
 **Modo prueba:** mientras el servidor tenga `AUTH_ENABLED=false`, las rutas
 de consulta (`/impo` y `/consultas`) responden sin token. Las de
@@ -153,4 +157,33 @@ por defecto, u `opcional` (llega como NULL si no se manda).
 - Máximo 5.000 filas y 30 segundos (configurables con `SQL_LIMITE_FILAS` y `SQL_TIEMPO_MAX_SEG`).
 - No permite leer la tabla `usuarios`.
 - Errores: 400 (SQL inválido o no permitido, con el mensaje de la base), 408 (tiempo superado).
-- Cada ejecución queda en el log del servidor con el usuario que la hizo.
+- Cada ejecución queda en el log del servidor y en la auditoría, con el usuario que la hizo y el texto de la consulta.
+
+## 4. Actividad de los usuarios (`/auditoria`, sólo admin)
+
+La API registra cada pedido en la tabla `auditoria` (`db/08_auditoria.sql`)
+después de responder, sin demorar la respuesta: quién, qué acción, ruta y
+parámetros, código HTTP, filas devueltas, duración e IP. No se registran los
+pedidos automáticos de la página (sugerencias del autocompletado, períodos,
+catálogos, `/auth/yo`). **Nunca se guardan claves ni tokens:** de un cambio
+de usuario queda "rol consulta → admin, clave cambiada", sin la clave.
+
+| Acción | Cuándo |
+|---|---|
+| `consulta` | Cualquier GET de datos (`/impo/...`, `/consultas/...`, lista de usuarios) |
+| `login`, `login_fallido`, `login_bloqueado` | Ingreso correcto, clave o usuario incorrectos, bloqueo por intentos (429). En los fallidos queda el usuario que se escribió |
+| `cambio_clave` | `POST /auth/clave` |
+| `alta_usuario`, `modif_usuario`, `baja_usuario` | POST, PATCH y DELETE de `/auth/usuarios`, con el detalle de qué cambió |
+| `sql_libre` | `POST /consultas/sql`, con el texto de la consulta |
+| `ver_auditoria` | Consultas a esta misma sección |
+
+| Método y ruta | Parámetros | Devuelve |
+|---|---|---|
+| `GET /auditoria` | `usuario`, `accion`, `desde`, `hasta` (AAAA-MM-DD, ambos incluidos), `errores=1` (sólo código ≥ 400), `limite` (100, hasta 1000), `antes` (id del último registro recibido, para la página siguiente) | `{ filas: [{ id, fecha, usuario, accion, metodo, ruta, detalle, estado, filas, duracion_ms, ip }], hay_mas }`, del más reciente al más viejo |
+| `GET /auditoria/resumen` | `usuario`, `desde`, `hasta` | por usuario: `ingresos`, `consultas`, `ingresos_fallidos`, `cambios_usuarios`, `sql_libre`, `errores`, `ultima` |
+
+Variables del servidor: `AUDITORIA=false` apaga el registro; `AUDITORIA_DIAS`
+(180) es cuánto se conserva (lo más viejo se borra una vez por día; `0` no
+borra nunca). `DB_TIMEZONE` (`-03:00`) fija la hora de la sesión de base,
+para que la auditoría y el último ingreso queden en hora de Argentina también
+en TiDB, que usa UTC.

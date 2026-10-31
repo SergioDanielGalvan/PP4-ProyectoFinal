@@ -21,4 +21,14 @@ const pool = mysql.createPool({
     : undefined,
 });
 
+// Hora de la sesión: NOW() y CURRENT_TIMESTAMP (último ingreso, auditoría) quedan
+// en la hora de Argentina. TiDB Cloud usa UTC por defecto; sin esto, las horas
+// guardadas en producción aparecían corridas 3 horas en la página.
+const ZONA = process.env.DB_TIMEZONE || '-03:00';
+pool.pool.on('connection', (conexion) => {
+  conexion.query('SET time_zone = ?', [ZONA], (err) => {
+    if (err) console.error(`No se pudo fijar time_zone=${ZONA}:`, err.message);
+  });
+});
+
 module.exports = pool;

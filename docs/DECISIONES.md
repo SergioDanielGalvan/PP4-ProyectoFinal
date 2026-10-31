@@ -411,10 +411,16 @@ Claves con bcrypt (`bcryptjs`, JavaScript puro: instala igual en Windows y en
 Render). Dos roles: `consulta` y `admin`. El token sólo dice quién es; si el
 usuario sigue activo y qué rol tiene se lee de la base (con un minuto de
 caché), así desactivar un usuario corta su acceso sin esperar a que venza el token.
+Lo mismo con la clave: el token lleva una huella (16 caracteres del SHA-256 del
+hash bcrypt) y la API la compara con la de la clave vigente; si la clave
+cambió, el token deja de valer. Así, quien cambia la clave porque sospecha que
+alguien la conoce cierra también la sesión de esa otra persona, sin agregar
+columnas ni una lista de tokens revocados.
 
 **Dónde viven los usuarios.** Tabla `usuarios` en la misma base. `comex_api`
 sigue sin poder modificar los datos de comercio exterior; sobre `usuarios`
-tiene SELECT, INSERT y UPDATE (sin DELETE: los usuarios se desactivan). En
+tiene SELECT, INSERT, UPDATE y DELETE; la API sólo borra usuarios que nunca
+ingresaron (los demás se desactivan, para conservar el historial). En
 TiDB la tabla la escribe la API directamente; no se copia desde MariaDB.
 
 **Protección por ruta.** `AUTH_ENABLED` sólo abre o cierra las consultas de
@@ -434,3 +440,31 @@ minutos.
   de tiempo (`max_execution_time` en TiDB/MySQL, `max_statement_time` en
   MariaDB) y de filas (se leen de a una y se corta al llegar al tope, sin
   cargar millones de filas en memoria). Cada ejecución queda en el log.
+
+## 20. Auditoría de actividad
+
+**Qué se registra.** Una fila por pedido a la API en la tabla `auditoria`:
+consultas con sus parámetros, ingresos e intentos fallidos, cambios de
+usuarios con lo que cambió y SQL libre con su texto. Se descartan los pedidos
+automáticos de la página (autocompletado, períodos, catálogos), que serían la
+mayoría de las filas sin decir nada de lo que hizo el usuario.
+
+**Cómo.** Un middleware (`middlewares/auditoria.js`) escribe la fila cuando
+la respuesta ya salió (`res.on('finish')`): no demora al usuario y, si la
+base falla, la consulta igual responde y el error queda en el log. Los
+controladores no conocen la auditoría salvo para dejar en `res.locals` un
+texto con el detalle (por ejemplo "rol consulta → admin"), que es la única
+forma de describir un cambio sin copiar el cuerpo del pedido, donde viaja la
+clave. El usuario se guarda como texto: el historial sobrevive aunque el
+usuario se elimine, y en un login fallido queda el nombre que se escribió.
+
+**Permisos.** `comex_api` tiene SELECT, INSERT y DELETE sobre `auditoria`,
+sin UPDATE: puede registrar y borrar lo vencido, pero no reescribir el
+historial. El DELETE es sólo para la retención (`AUDITORIA_DIAS`, 180 días).
+
+**Volumen.** Con el uso del proyecto son cientos de filas por día de unos
+200 bytes: menos de 50 MB por año, dentro de los 5 GiB gratuitos de TiDB.
+
+**Hora.** TiDB Cloud trabaja en UTC: el último ingreso se veía 3 horas
+adelantado en la página. El pool fija `time_zone = '-03:00'` en cada
+conexión (`DB_TIMEZONE`), así `NOW()` da la hora de Argentina en las dos bases.

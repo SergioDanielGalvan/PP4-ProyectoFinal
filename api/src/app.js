@@ -7,6 +7,8 @@ const authRoutes = require('./routes/auth.routes');
 const consultasRoutes = require('./routes/consultas.routes');
 const { requireAuth } = require('./middlewares/auth');
 const { notFound, errorHandler } = require('./middlewares/errors');
+const { auditar } = require('./middlewares/auditoria');
+const auditoriaRoutes = require('./routes/auditoria.routes');
 
 const app = express();
 
@@ -17,6 +19,9 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // La raíz lleva a la página de consulta
 app.get('/', (req, res) => res.redirect('/impo.html'));
+
+// Auditoría: registra cada pedido a /api después de responder (ver middlewares/auditoria.js)
+app.use('/api', auditar);
 
 // Chequeo rápido de que la API y la base responden
 app.get('/api/health', async (req, res, next) => {
@@ -36,6 +41,9 @@ app.use('/api/impo', requireAuth, impoRoutes);
 
 // Consultas SQL guardadas y SQL libre (este último, sólo admin)
 app.use('/api/consultas', consultasRoutes);
+
+// Actividad de los usuarios (sólo admin)
+app.use('/api/auditoria', auditoriaRoutes);
 
 app.use('/api', notFound);
 app.use(errorHandler);

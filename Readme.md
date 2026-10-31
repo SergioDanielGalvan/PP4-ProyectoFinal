@@ -152,6 +152,21 @@ La guía completa para el front está en [`docs/API.md`](docs/API.md).
 `AUTH_ENABLED=false` deja abiertas las consultas de datos (modo prueba); la
 administración de usuarios y el SQL libre piden token de admin siempre.
 
+## Auditoría (pestaña Actividad)
+
+La API registra lo que hace cada usuario (consultas, ingresos e intentos
+fallidos, cambios de usuarios y SQL libre) y los administradores lo ven en la
+pestaña **Actividad**. Detalle en [`docs/API.md`](docs/API.md) §4.
+
+1. **MariaDB:** pegar `db/08_auditoria.sql` en la pestaña SQL de phpMyAdmin
+   (como root): crea la tabla `auditoria` y le da a `comex_api` SELECT,
+   INSERT y DELETE sobre ella.
+2. **TiDB:** pegar el `CREATE TABLE` de `db/08_auditoria.sql` en el SQL Editor
+   (o `node copiar-a-tidb.js --esquema`, que ya la incluye) y dar el permiso:
+   `GRANT SELECT, INSERT, DELETE ON comex.auditoria TO 'prefijo.comex_api'@'%';`
+
+Sin la tabla, la API funciona igual y avisa una vez en el log.
+
 ## Endpoints de la API
 
 | Método y ruta | Parámetros | Devuelve |

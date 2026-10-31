@@ -26,14 +26,18 @@ let loginPendiente = null;
 
 function mostrarSesion(usuario) {
   // La pestaña Usuarios sólo existe para administradores (la API igual lo controla)
-  $('#tab-usuarios').hidden = !(usuario && usuario.rol === 'admin');
+  const esAdmin = Boolean(usuario && usuario.rol === 'admin');
+  $('#tab-usuarios').hidden = !esAdmin;
+  $('#tab-actividad').hidden = !esAdmin;
   usuarioActual = usuario || null;
   const s = $('#sesion');
   s.hidden = false;
   // Sin sesión se ofrece ingresar: con AUTH_ENABLED=false las consultas
   // andan sin login, pero la administración de usuarios lo necesita
   s.innerHTML = usuario
-    ? `<span>${esc(usuario.nombre || usuario.usuario)}</span> <button type="button" class="btn btn-sm btn-outline-light" id="salir">Salir</button>`
+    ? `<span>${esc(usuario.nombre || usuario.usuario)}</span>
+       <button type="button" class="btn btn-sm btn-outline-light" id="mi-clave" title="Cambiar mi clave"><i class="bi bi-key"></i><span class="d-none d-md-inline"> Mi clave</span></button>
+       <button type="button" class="btn btn-sm btn-outline-light" id="salir">Salir</button>`
     : '<button type="button" class="btn btn-sm btn-outline-light" id="ingresar">Ingresar</button>';
 }
 
@@ -67,8 +71,11 @@ function pedirLogin() {
 }
 
 $('#sesion').addEventListener('click', (e) => {
-  if (e.target.id === 'ingresar') { pedirLogin().catch(() => {}); return; }
-  if (e.target.id !== 'salir') return;
+  const boton = e.target.closest('button');
+  if (!boton) return;
+  if (boton.id === 'ingresar') { pedirLogin().catch(() => {}); return; }
+  if (boton.id === 'mi-clave') { abrirCambioClave(); return; }
+  if (boton.id !== 'salir') return;
   tokenEnMemoria = null;
   guardarToken(null);
   mostrarSesion(null);
@@ -141,6 +148,7 @@ document.querySelectorAll('[role="tab"]').forEach((tab) => {
     if (tab.dataset.panel === 'p-triangulaciones') cargarTriangulaciones();
     if (tab.dataset.panel === 'p-matriz' && !matrizEstado.cargada) cargarMatriz();
     if (tab.dataset.panel === 'p-usuarios') cargarUsuarios();
+    if (tab.dataset.panel === 'p-actividad') abrirActividad();
   });
 });
 
@@ -1414,6 +1422,14 @@ function abrirFormUsuario(u) {
   const yo = u && usuarioActual && u.id === usuarioActual.id;
   $('#mu-activo').disabled = Boolean(yo);
   $('#mu-rol').disabled = Boolean(yo);
+  // La clave propia se cambia con "Mi clave", que pide la actual y mantiene la sesión
+  $('#mu-clave').disabled = Boolean(yo);
+  $('#mu-generar').disabled = Boolean(yo);
+  if (yo) $('#mu-clave-ayuda').textContent = 'Tu propia clave se cambia con el botón "Mi clave", arriba a la derecha.';
+  if (u) {
+    // Además del cambio, el usuario tiene que volver a ingresar: sus sesiones abiertas se cierran
+    if (!yo) $('#mu-clave-ayuda').textContent += ' Si la cambiás, se cierran las sesiones abiertas de ese usuario.';
+  }
   modalUsuario().show();
 }
 
@@ -1499,5 +1515,251 @@ $('#mc-aceptar').addEventListener('click', async () => {
     idAEliminar = null;
     modalConfirmar().hide();
     cargarUsuarios();
+  }
+});
+
+// ---------- actividad (auditoría, sólo administradores) ----------
+// Muestra la tabla auditoria: un resumen por usuario y el detalle de cada
+// pedido, del más reciente al más viejo, de a 100 ("Ver más" trae los siguientes).
+const ACCIONES = {
+  consulta: { texto: 'Consulta', clase: 'text-bg-light border' },
+  login: { texto: 'Ingreso', clase: 'text-bg-success' },
+  login_fallido: { texto: 'Ingreso fallido', clase: 'text-bg-warning' },
+  login_bloqueado: { texto: 'Ingreso bloqueado', clase: 'text-bg-danger' },
+  cambio_clave: { texto: 'Cambio de clave', clase: 'text-bg-info' },
+  alta_usuario: { texto: 'Alta de usuario', clase: 'text-bg-primary' },
+  modif_usuario: { texto: 'Cambio de usuario', clase: 'text-bg-primary' },
+  baja_usuario: { texto: 'Baja de usuario', clase: 'text-bg-primary' },
+  sql_libre: { texto: 'SQL libre', clase: 'text-bg-dark' },
+  ver_auditoria: { texto: 'Ver actividad', clase: 'text-bg-secondary' },
+  otra: { texto: 'Otra', clase: 'text-bg-secondary' },
+};
+const actEstado = { preparada: false, filtros: {}, filas: [], hayMas: false };
+
+// "2026-10-31 13:05:48" -> "31/10/26 13:05:48" (la API ya la da en hora de Argentina)
+const fechaHora = (v) => (v ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(2, 4)} ${v.slice(11, 19)}` : '');
+const hoy = (diasAtras = 0) => new Date(Date.now() - diasAtras * 864e5).toLocaleDateString('sv-SE');
+
+// Qué pantalla o acción corresponde a cada ruta de la API
+function queHizo(f) {
+  const r = f.ruta;
+  let m;
+  if ((m = r.match(/^\/impo\/despachos\/(.+)$/))) return `Despacho ${m[1]}`;
+  if ((m = r.match(/^\/impo\/ncm\/([^/]+)\/precios$/))) return `Precios de ${m[1]}`;
+  if ((m = r.match(/^\/impo\/ncm\/([^/]+)\/valores-bajos$/))) return `Valores bajos de ${m[1]}`;
+  if ((m = r.match(/^\/consultas\/([^/]+)$/)) && f.accion === 'consulta') return `Consulta guardada ${m[1]}`;
+  const fijas = {
+    '/impo/despachos': 'Últimos despachos', '/impo/subpartidas': 'Subpartidas', '/impo/importadores': 'Importadores',
+    '/impo/triangulaciones': 'Triangulaciones', '/impo/matriz': 'Matriz', '/auth/usuarios': 'Lista de usuarios',
+    '/auditoria': 'Actividad', '/auditoria/resumen': 'Resumen de actividad', '/consultas': 'Consultas guardadas',
+  };
+  if (f.accion === 'consulta' || f.accion === 'ver_auditoria') return fijas[r] || `${f.metodo} ${r}`;
+  return '';   // en ingresos, cambios de usuarios y SQL libre alcanza con la acción y el detalle
+}
+
+function filtrosActividad() {
+  return {
+    usuario: $('#ac-usuario').value,
+    accion: $('#ac-accion').value,
+    desde: $('#ac-desde').value,
+    hasta: $('#ac-hasta').value,
+    errores: $('#ac-errores').checked ? '1' : '',
+  };
+}
+
+async function abrirActividad() {
+  if (!actEstado.preparada) {
+    actEstado.preparada = true;
+    $('#ac-accion').innerHTML = '<option value="">Todas</option>'
+      + Object.entries(ACCIONES).map(([k, a]) => `<option value="${k}">${a.texto}</option>`).join('');
+    $('#ac-desde').value = hoy(6);
+    $('#ac-hasta').value = hoy();
+    try {
+      const lista = listaUsuarios.length ? listaUsuarios : await enviar('GET', '/auth/usuarios');
+      $('#ac-usuario').innerHTML = '<option value="">Todos</option>'
+        + lista.map((u) => `<option value="${esc(u.usuario)}">${esc(u.usuario)} · ${esc(u.nombre)}</option>`).join('');
+    } catch { /* sin la lista se puede filtrar igual desde el resumen */ }
+  }
+  buscarActividad();
+}
+
+async function buscarActividad() {
+  const destino = $('#r-actividad');
+  actEstado.filtros = filtrosActividad();
+  destino.innerHTML = '<p class="text-secondary">Buscando…</p>';
+  try {
+    const sinVacios = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v));
+    const qs = (o) => new URLSearchParams(sinVacios(o)).toString();
+    const [resumen, pagina] = await Promise.all([
+      enviar('GET', `/auditoria/resumen?${qs({ ...actEstado.filtros, accion: '', errores: '' })}`),
+      enviar('GET', `/auditoria?${qs({ ...actEstado.filtros, limite: 100 })}`),
+    ]);
+    actEstado.filas = pagina.filas;
+    actEstado.hayMas = pagina.hay_mas;
+    dibujarResumenActividad(resumen);
+    dibujarActividad();
+  } catch (err) {
+    $('#r-actividad-resumen').innerHTML = '';
+    mensaje(destino, err.status === 403 ? 'Sólo los administradores pueden ver la actividad.' : err.message, true);
+  }
+}
+
+function dibujarResumenActividad(resumen) {
+  const destino = $('#r-actividad-resumen');
+  if (!resumen.length) { destino.innerHTML = ''; return; }
+  const filas = resumen.map((r) => `<tr>
+    <td><a href="#" class="codigo ac-usuario" data-usuario="${esc(r.usuario)}">${esc(r.usuario)}</a></td>
+    <td class="n">${num(r.ingresos)}</td>
+    <td class="n">${num(r.consultas)}</td>
+    <td class="n">${r.ingresos_fallidos ? `<span class="text-danger fw-semibold">${num(r.ingresos_fallidos)}</span>` : 0}</td>
+    <td class="n">${num(r.cambios_usuarios)}</td>
+    <td class="n">${num(r.sql_libre)}</td>
+    <td class="n">${num(r.errores)}</td>
+    <td>${esc(fechaHora(r.ultima))}</td></tr>`);
+  destino.innerHTML = '<h3 class="h6 fw-bold">Resumen por usuario</h3>' + tabla([
+    { titulo: 'Usuario' }, { titulo: 'Ingresos', n: true }, { titulo: 'Consultas', n: true },
+    { titulo: 'Ingresos fallidos', n: true }, { titulo: 'Cambios de usuarios', n: true }, { titulo: 'SQL libre', n: true },
+    { titulo: 'Errores', n: true }, { titulo: 'Última actividad' },
+  ], filas) + '<p class="nota small text-secondary">Un clic en el usuario muestra sólo su actividad.</p>';
+}
+
+function filaActividad(f) {
+  const a = ACCIONES[f.accion] || ACCIONES.otra;
+  const que = queHizo(f);
+  const detalle = f.detalle || '';
+  const resultado = f.estado < 400
+    ? `<span class="text-success">OK</span>${f.filas !== null && f.filas !== undefined ? ` · ${num(f.filas)} filas` : ''}`
+    : `<span class="badge text-bg-danger">${f.estado}</span>`;
+  return `<tr class="${f.estado >= 400 ? 'table-warning' : ''}">
+    <td class="text-nowrap">${esc(fechaHora(f.fecha))}</td>
+    <td class="codigo">${esc(f.usuario || '—')}</td>
+    <td><span class="badge ${a.clase}">${a.texto}</span></td>
+    <td>${que ? `<strong>${esc(que)}</strong>${detalle ? '<br>' : ''}` : ''}<span class="small text-secondary" title="${esc(detalle)}">${esc(corto(detalle, 160))}</span></td>
+    <td class="text-nowrap">${resultado}</td>
+    <td class="n">${num(f.duracion_ms)} ms</td>
+    <td class="codigo small">${esc(f.ip || '')}</td></tr>`;
+}
+
+function dibujarActividad() {
+  const destino = $('#r-actividad');
+  if (!actEstado.filas.length) { mensaje(destino, 'No hay actividad con esos filtros.'); return; }
+  const acciones = `
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h3 class="h6 fw-bold mb-0">Detalle (${num(actEstado.filas.length)}${actEstado.hayMas ? ' más recientes' : ''})</h3>
+      <button type="button" id="b-actividad-excel" class="btn btn-sm btn-outline-secondary">Exportar (CSV)</button>
+    </div>`;
+  destino.innerHTML = acciones + tabla([
+    { titulo: 'Fecha y hora' }, { titulo: 'Usuario' }, { titulo: 'Acción' }, { titulo: 'Qué hizo' },
+    { titulo: 'Resultado' }, { titulo: 'Duración', n: true }, { titulo: 'IP' },
+  ], actEstado.filas.map(filaActividad))
+    + (actEstado.hayMas ? '<button type="button" id="b-actividad-mas" class="btn btn-outline-primary btn-sm mt-2">Ver más</button>' : '');
+}
+
+async function masActividad() {
+  const ultimo = actEstado.filas[actEstado.filas.length - 1];
+  const sinVacios = Object.fromEntries(Object.entries({ ...actEstado.filtros, limite: 100, antes: ultimo.id }).filter(([, v]) => v));
+  try {
+    const pagina = await enviar('GET', `/auditoria?${new URLSearchParams(sinVacios)}`);
+    actEstado.filas.push(...pagina.filas);
+    actEstado.hayMas = pagina.hay_mas;
+    dibujarActividad();
+  } catch (err) { mensaje($('#r-actividad'), err.message, true); }
+}
+
+function exportarActividad() {
+  const f = actEstado.filtros;
+  const lineas = [
+    ['Actividad de los usuarios'],
+    [`Desde: ${f.desde || 'inicio'} · Hasta: ${f.hasta || 'hoy'}${f.usuario ? ` · Usuario: ${f.usuario}` : ''}${f.accion ? ` · Acción: ${ACCIONES[f.accion].texto}` : ''}${f.errores ? ' · Sólo errores' : ''}`],
+    [],
+    ['Fecha y hora', 'Usuario', 'Acción', 'Qué hizo', 'Detalle', 'Código HTTP', 'Filas', 'Duración (ms)', 'IP'],
+    ...actEstado.filas.map((x) => [fechaHora(x.fecha), x.usuario || '', (ACCIONES[x.accion] || ACCIONES.otra).texto,
+      queHizo(x), x.detalle || '', x.estado, x.filas ?? '', x.duracion_ms, x.ip || '']),
+  ];
+  const csv = '﻿' + lineas.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+  const enlace = document.createElement('a');
+  enlace.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  enlace.download = `Actividad_${f.desde || 'inicio'}_${f.hasta || 'hoy'}.csv`;
+  enlace.click();
+  URL.revokeObjectURL(enlace.href);
+}
+
+$('#f-actividad').addEventListener('submit', (e) => { e.preventDefault(); buscarActividad(); });
+$('#b-limpiar-actividad').addEventListener('click', () => {
+  $('#ac-usuario').value = '';
+  $('#ac-accion').value = '';
+  $('#ac-desde').value = hoy(6);
+  $('#ac-hasta').value = hoy();
+  $('#ac-errores').checked = false;
+  buscarActividad();
+});
+$('#r-actividad-resumen').addEventListener('click', (e) => {
+  const a = e.target.closest('.ac-usuario');
+  if (!a) return;
+  e.preventDefault();
+  const sel = $('#ac-usuario');
+  // Un usuario eliminado o un nombre escrito en un login fallido no está en la lista: se agrega
+  if (![...sel.options].some((o) => o.value === a.dataset.usuario)) sel.add(new Option(a.dataset.usuario, a.dataset.usuario));
+  sel.value = a.dataset.usuario;
+  buscarActividad();
+});
+$('#r-actividad').addEventListener('click', (e) => {
+  if (e.target.id === 'b-actividad-mas') masActividad();
+  if (e.target.id === 'b-actividad-excel') exportarActividad();
+});
+
+// ---------- cambiar mi clave (cualquier usuario con sesión) ----------
+// La API pide la clave actual, cierra las demás sesiones del usuario y
+// devuelve un token nuevo para seguir conectado en esta.
+const modalClave = () => bootstrap.Modal.getOrCreateInstance($('#m-clave'));
+
+function abrirCambioClave() {
+  const f = $('#f-clave');
+  f.reset();
+  f.querySelectorAll('.is-invalid').forEach((x) => x.classList.remove('is-invalid'));
+  ['#mk-actual', '#mk-nueva', '#mk-repetir'].forEach((s) => { $(s).type = 'password'; });
+  $('#mk-usuario').value = usuarioActual ? usuarioActual.usuario : '';   // para el gestor de claves del navegador
+  $('#mk-error').hidden = true;
+  modalClave().show();
+}
+
+$('#m-clave').addEventListener('shown.bs.modal', () => $('#mk-actual').focus());
+$('#mk-ver').addEventListener('change', (e) => {
+  ['#mk-actual', '#mk-nueva', '#mk-repetir'].forEach((s) => { $(s).type = e.target.checked ? 'text' : 'password'; });
+});
+
+$('#f-clave').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const actual = $('#mk-actual').value;
+  const nueva = $('#mk-nueva').value;
+  let ok = true;
+  const marcar = (el, malo) => { el.classList.toggle('is-invalid', malo); if (malo) ok = false; };
+  marcar($('#mk-actual'), !actual);
+  $('#mk-nueva-error').textContent = nueva.length < 10
+    ? 'La clave nueva tiene que tener al menos 10 caracteres.'
+    : 'La clave nueva tiene que ser distinta de la actual.';
+  marcar($('#mk-nueva'), nueva.length < 10 || nueva === actual);
+  marcar($('#mk-repetir'), $('#mk-repetir').value !== nueva);
+  if (!ok) return;
+
+  $('#mk-guardar').disabled = true;
+  $('#mk-error').hidden = true;
+  try {
+    // Sin reintento: un 401 acá no se arregla pidiendo login en medio del formulario
+    const r = await enviar('POST', '/auth/clave', { actual, nueva }, false);
+    tokenEnMemoria = r.token;
+    guardarToken(r.token);
+    modalClave().hide();
+    const aviso = document.createElement('div');
+    aviso.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 end-0 m-3 shadow';
+    aviso.style.zIndex = 2000;
+    aviso.innerHTML = 'Tu clave se cambió. Usala la próxima vez que ingreses. <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>';
+    document.body.append(aviso);
+    setTimeout(() => aviso.remove(), 8000);
+  } catch (err) {
+    $('#mk-error').textContent = err.status === 401 ? 'Tu sesión venció: salí y volvé a ingresar para cambiar la clave.' : err.message;
+    $('#mk-error').hidden = false;
+  } finally {
+    $('#mk-guardar').disabled = false;
   }
 });

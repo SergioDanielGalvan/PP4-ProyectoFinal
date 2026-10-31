@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const pool = require('../config/db');
 
 // Nunca devuelve ClaveHash salvo en buscarParaLogin.
@@ -15,6 +16,18 @@ async function buscarPorId(id) {
   if (!rows[0]) return null;
   return { ...rows[0], activo: Boolean(rows[0].activo) };
 }
+
+// Para validar el token: datos del usuario más una huella de su clave actual
+// (los primeros 16 caracteres del SHA-256 del hash bcrypt). Cuando la clave
+// cambia, la huella cambia y los tokens emitidos antes dejan de valer.
+async function buscarVigente(id) {
+  const [rows] = await pool.query(`SELECT ${COLUMNAS}, ClaveHash AS clave_hash FROM usuarios WHERE IdUsuario = ?`, [id]);
+  if (!rows[0]) return null;
+  const { clave_hash: hash, ...usuario } = rows[0];
+  return { ...usuario, activo: Boolean(usuario.activo), huella: huellaClave(hash) };
+}
+
+const huellaClave = (hash) => crypto.createHash('sha256').update(String(hash)).digest('hex').slice(0, 16);
 
 async function listar() {
   const [rows] = await pool.query(`SELECT ${COLUMNAS} FROM usuarios ORDER BY Usuario`);
@@ -58,4 +71,4 @@ async function contarAdminsActivos() {
   return Number(n);
 }
 
-module.exports = { buscarParaLogin, buscarPorId, listar, crear, actualizar, eliminar, registrarIngreso, contarAdminsActivos };
+module.exports = { buscarParaLogin, buscarPorId, buscarVigente, huellaClave, listar, crear, actualizar, eliminar, registrarIngreso, contarAdminsActivos };

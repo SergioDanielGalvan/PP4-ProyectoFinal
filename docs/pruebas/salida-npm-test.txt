@@ -1,38 +1,55 @@
+▶ Auditoría de actividad
+  ✔ registra el ingreso y el ingreso fallido, sin guardar la clave (96.73012ms)
+  ✔ registra las consultas con sus parámetros y las filas devueltas; no las sugerencias (23.784275ms)
+  ✔ registra alta, cambio y baja de usuarios con lo que cambió (nunca la clave) (243.486763ms)
+  ✔ sólo un administrador puede ver la actividad, con filtros (25.657126ms)
+✔ Auditoría de actividad (636.898903ms)
+▶ Cambio de la clave propia
+  ✔ sin sesión no se puede cambiar la clave (401) (5.372566ms)
+  ✔ rechaza una clave actual equivocada, una nueva corta o igual a la actual (400) y no cambia nada (182.612709ms)
+  ✔ con la clave actual correcta la cambia y devuelve un token nuevo (447.515496ms)
+  ✔ las sesiones abiertas con la clave anterior dejan de valer; la nueva sigue (10.83833ms)
+  ✔ si un administrador le resetea la clave, también se cierran sus sesiones (215.721707ms)
+✔ Cambio de la clave propia (1310.497421ms)
 ▶ Precios por partida contra la base
-  ✔ la partida completa suma lo mismo en la API y en la base (11.309499ms)
-  ✔ el filtro por país de origen devuelve sólo ese origen y la misma suma (7.272409ms)
-  ✔ un código incompleto se rechaza con un mensaje claro (400) (3.636817ms)
-✔ Precios por partida contra la base (249.372856ms)
+  ✔ la partida completa suma lo mismo en la API y en la base (20.889742ms)
+  ✔ el filtro por país de origen devuelve sólo ese origen y la misma suma (23.108452ms)
+  ✔ un código incompleto se rechaza con un mensaje claro (400) (6.539155ms)
+✔ Precios por partida contra la base (302.632801ms)
 ▶ CRUD de usuarios
-  ✔ sin token no se puede administrar usuarios (401) (6.413993ms)
-  ✔ CREATE: el alta queda guardada en la base (94.349705ms)
-  ✔ CREATE: rechaza el usuario duplicado (409) y el nombre vacío (400) (202.782673ms)
-  ✔ READ: la lista incluye el usuario creado (4.744645ms)
-  ✔ UPDATE: el cambio de nombre y de clave se guarda y la clave nueva sirve para ingresar (265.211803ms)
-  ✔ DELETE: un usuario que ya ingresó no se elimina (409); se desactiva (93.691946ms)
-  ✔ DELETE: un usuario que nunca ingresó se elimina de la base (96.9054ms)
-✔ CRUD de usuarios (976.450165ms)
-✔ acepta partida, subpartida y NCM completas, con o sin puntos (1.034299ms)
-✔ rechaza códigos incompletos con un error 400 (0.407506ms)
-✔ arma el rango completando con 0 y con 9 (0.706838ms)
-✔ rechaza un rango invertido (0.206353ms)
-✔ calcula la letra verificadora de despachos reales (1.098807ms)
-✔ acepta el número completo y completa la letra si falta (0.852385ms)
-✔ rechaza una letra verificadora equivocada e indica la correcta (0.212642ms)
-✔ rechaza largo, año, aduana o número mal formados (0.143145ms)
-✔ permite consultas de lectura (1.601231ms)
-✔ rechaza sentencias que modifican datos (0.483748ms)
-✔ rechaza dos sentencias juntas, aunque la segunda esté después de un comentario (1.029886ms)
-✔ rechaza leer la tabla de usuarios y las funciones peligrosas (0.303529ms)
-✔ rechaza una consulta vacía (0.386738ms)
-✔ normaliza el nombre de usuario a minúsculas y valida los caracteres (1.203573ms)
-✔ exige claves de 10 a 72 caracteres (0.253826ms)
-✔ sólo acepta los roles admin y consulta (0.13633ms)
-ℹ tests 26
-ℹ suites 2
-ℹ pass 26
+  ✔ sin token no se puede administrar usuarios (401) (9.485744ms)
+  ✔ CREATE: el alta queda guardada en la base (104.089107ms)
+  ✔ CREATE: rechaza el usuario duplicado (409) y el nombre vacío (400) (177.193044ms)
+  ✔ READ: la lista incluye el usuario creado (5.054815ms)
+  ✔ UPDATE: el cambio de nombre y de clave se guarda y la clave nueva sirve para ingresar (294.004298ms)
+  ✔ DELETE: un usuario que ya ingresó no se elimina (409); se desactiva (120.112304ms)
+  ✔ DELETE: un usuario que nunca ingresó se elimina de la base (130.178497ms)
+✔ CRUD de usuarios (1088.036557ms)
+✔ clasifica cada pedido en una acción (1.283125ms)
+✔ nunca guarda claves ni tokens de los parámetros (0.453383ms)
+✔ el usuario escrito en un login fallido se guarda en ascii y hasta 40 caracteres (0.444788ms)
+✔ valida los filtros de la consulta de actividad (2.29874ms)
+✔ acepta partida, subpartida y NCM completas, con o sin puntos (1.372479ms)
+✔ rechaza códigos incompletos con un error 400 (0.584823ms)
+✔ arma el rango completando con 0 y con 9 (1.03415ms)
+✔ rechaza un rango invertido (0.174724ms)
+✔ calcula la letra verificadora de despachos reales (1.769713ms)
+✔ acepta el número completo y completa la letra si falta (1.445497ms)
+✔ rechaza una letra verificadora equivocada e indica la correcta (0.324892ms)
+✔ rechaza largo, año, aduana o número mal formados (0.244787ms)
+✔ permite consultas de lectura (2.616053ms)
+✔ rechaza sentencias que modifican datos (0.667811ms)
+✔ rechaza dos sentencias juntas, aunque la segunda esté después de un comentario (0.403947ms)
+✔ rechaza leer la tabla de usuarios y las funciones peligrosas (0.491803ms)
+✔ rechaza una consulta vacía (0.269629ms)
+✔ normaliza el nombre de usuario a minúsculas y valida los caracteres (1.611249ms)
+✔ exige claves de 10 a 72 caracteres (0.339375ms)
+✔ sólo acepta los roles admin y consulta (0.236961ms)
+ℹ tests 39
+ℹ suites 4
+ℹ pass 39
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 2265.370324
+ℹ duration_ms 5569.467788

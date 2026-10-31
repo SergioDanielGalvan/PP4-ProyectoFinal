@@ -124,6 +124,9 @@
       <button class="nav-link" role="tab" aria-selected="false" data-panel="p-usuarios" id="tab-usuarios" hidden>
         <i class="bi bi-people-fill me-1"></i> Usuarios
       </button>
+      <button class="nav-link" role="tab" aria-selected="false" data-panel="p-actividad" id="tab-actividad" hidden>
+        <i class="bi bi-activity me-1"></i> Actividad
+      </button>
     </nav>
 
     <!-- Contenido Principal -->
@@ -351,10 +354,93 @@
         <div id="u-mensaje"></div>
         <div id="r-usuarios"></div>
       </section>
+      <!-- Panel Actividad (auditoría, sólo administradores) -->
+      <section id="p-actividad" class="panel" hidden>
+        <div class="mb-3">
+          <h2 class="h4 mb-1">Actividad de los usuarios</h2>
+          <p class="text-secondary small mb-0">Qué consultó cada usuario, ingresos e intentos fallidos, cambios de usuarios y SQL libre. Las claves nunca se registran.</p>
+        </div>
+        <div class="card card-filtro mb-4">
+          <div class="card-body">
+            <form id="f-actividad" class="buscador">
+              <div class="row g-2 align-items-end">
+                <div class="col-sm-6 col-md-3 col-lg-2">
+                  <label for="ac-usuario" class="form-label small fw-semibold text-secondary">Usuario</label>
+                  <select id="ac-usuario" class="form-select"><option value="">Todos</option></select>
+                </div>
+                <div class="col-sm-6 col-md-3 col-lg-2">
+                  <label for="ac-accion" class="form-label small fw-semibold text-secondary">Acción</label>
+                  <select id="ac-accion" class="form-select"><option value="">Todas</option></select>
+                </div>
+                <div class="col-sm-6 col-md-3 col-lg-2">
+                  <label for="ac-desde" class="form-label small fw-semibold text-secondary">Desde</label>
+                  <input type="date" id="ac-desde" class="form-control">
+                </div>
+                <div class="col-sm-6 col-md-3 col-lg-2">
+                  <label for="ac-hasta" class="form-label small fw-semibold text-secondary">Hasta</label>
+                  <input type="date" id="ac-hasta" class="form-control">
+                </div>
+                <div class="col-sm-12 col-md-6 col-lg-4 d-flex gap-2 align-items-center">
+                  <button type="submit" class="btn btn-primary">Buscar</button>
+                  <button type="button" id="b-limpiar-actividad" class="btn btn-outline-secondary">Limpiar</button>
+                  <div class="form-check mb-0 ms-1">
+                    <input class="form-check-input" type="checkbox" id="ac-errores">
+                    <label class="form-check-label small" for="ac-errores">Sólo errores</label>
+                  </div>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div id="r-actividad-resumen" class="mb-4"></div>
+        <div id="r-actividad"></div>
+      </section>
+
     </main>
   </div>
 
   <!-- Alta y edición de usuario -->
+  <!-- Cambiar mi clave (cualquier usuario con sesión) -->
+  <div class="modal fade" id="m-clave" tabindex="-1" aria-labelledby="mk-titulo" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="f-clave" novalidate>
+        <div class="modal-header">
+          <h5 class="modal-title" id="mk-titulo">Cambiar mi clave</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <input type="text" id="mk-usuario" autocomplete="username" hidden>
+          <div class="mb-3">
+            <label for="mk-actual" class="form-label small fw-semibold">Clave actual</label>
+            <input type="password" id="mk-actual" class="form-control" maxlength="72" autocomplete="current-password" required>
+            <div class="invalid-feedback">Escribí tu clave actual.</div>
+          </div>
+          <div class="mb-3">
+            <label for="mk-nueva" class="form-label small fw-semibold">Clave nueva</label>
+            <input type="password" id="mk-nueva" class="form-control" maxlength="72" autocomplete="new-password" required>
+            <div class="form-text">Al menos 10 caracteres. Conviene una frase o una mezcla de letras y números que no uses en otro sitio.</div>
+            <div class="invalid-feedback" id="mk-nueva-error"></div>
+          </div>
+          <div class="mb-3">
+            <label for="mk-repetir" class="form-label small fw-semibold">Repetir la clave nueva</label>
+            <input type="password" id="mk-repetir" class="form-control" maxlength="72" autocomplete="new-password" required>
+            <div class="invalid-feedback">Las dos claves nuevas no coinciden.</div>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="mk-ver">
+            <label class="form-check-label small" for="mk-ver">Mostrar las claves</label>
+          </div>
+          <p class="small text-secondary mt-3 mb-0">Al guardar, se cierran tus sesiones abiertas en otras computadoras o navegadores. En esta seguís conectado.</p>
+          <div class="alert alert-danger py-2 small mt-3 mb-0" id="mk-error" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="mk-guardar">Cambiar clave</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="modal fade" id="m-usuario" tabindex="-1" aria-labelledby="mu-titulo" aria-hidden="true">
     <div class="modal-dialog">
       <form class="modal-content" id="f-usuario" novalidate>

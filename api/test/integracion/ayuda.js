@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const request = require('supertest');
 const app = require('../../src/app');
 const pool = require('../../src/config/db');
+const auditoria = require('../../src/models/auditoria.model');
 
 const PREFIJO = 'test_';   // todos los usuarios de prueba empiezan así
 const sufijo = Date.now().toString(36);
@@ -22,9 +23,12 @@ async function prepararAdmin() {
   return r.body.token;
 }
 
-// Borra sólo los usuarios creados en esta corrida (test_..._<sufijo>)
+// Borra sólo los usuarios creados en esta corrida (test_..._<sufijo>) y lo que
+// registraron en la auditoría (espera antes a que terminen de escribirse)
 async function limpiar() {
+  await auditoria.esperarPendientes();
   await pool.query("DELETE FROM usuarios WHERE Usuario LIKE 'test\\_%' AND Usuario LIKE ?", [`%\\_${sufijo}`]);
+  await pool.query("DELETE FROM auditoria WHERE Usuario LIKE 'test\\_%' AND Usuario LIKE ?", [`%\\_${sufijo}`]);
 }
 
-module.exports = { app, pool, request, PREFIJO, sufijo, ADMIN, sinBase, prepararAdmin, limpiar };
+module.exports = { app, pool, auditoria, request, PREFIJO, sufijo, ADMIN, sinBase, prepararAdmin, limpiar };

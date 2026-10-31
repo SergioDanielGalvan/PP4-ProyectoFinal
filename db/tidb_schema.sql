@@ -167,3 +167,22 @@ CREATE TABLE IF NOT EXISTS usuarios (
   CreadoEn      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UltimoIngreso DATETIME NULL
 );
+
+-- Auditoría de la API (la escribe la API; no se copia de MariaDB). Ver db/08_auditoria.sql
+CREATE TABLE IF NOT EXISTS auditoria (
+  IdAuditoria BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  Fecha       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  IdUsuario   INT UNSIGNED NULL,
+  Usuario     VARCHAR(40) CHARACTER SET ascii NULL,
+  Accion      VARCHAR(20) CHARACTER SET ascii NOT NULL,
+  Metodo      VARCHAR(7) CHARACTER SET ascii NOT NULL,
+  Ruta        VARCHAR(200) NOT NULL,
+  Detalle     VARCHAR(2000) NULL,
+  Estado      SMALLINT UNSIGNED NOT NULL,
+  Filas       INT UNSIGNED NULL,
+  DuracionMs  INT UNSIGNED NOT NULL,
+  Ip          VARCHAR(45) CHARACTER SET ascii NULL,
+  KEY ix_auditoria_fecha (Fecha),
+  KEY ix_auditoria_usuario (Usuario, Fecha),
+  KEY ix_auditoria_accion (Accion, Fecha)
+);
