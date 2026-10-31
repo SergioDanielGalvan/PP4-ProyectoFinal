@@ -43,7 +43,7 @@ function controlarIntentos(clave) {
   const f = fallos.get(clave);
   if (f && Date.now() - f.desde < VENTANA_MS && f.n >= MAX_FALLOS) {
     const minutos = Math.ceil((VENTANA_MS - (Date.now() - f.desde)) / 60000);
-    throw new HttpError(429, `Demasiados intentos fallidos. Probá de nuevo en ${minutos} minutos.`);
+    throw new HttpError(429, `Demasiados intentos fallidos. Probá de nuevo en ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'}.`);
   }
 }
 
@@ -122,9 +122,12 @@ const modificarUsuario = handler(async (req, res) => {
   if (!actual) throw new HttpError(404, 'No existe ese usuario.');
 
   const cambios = {};
-  if (req.body?.nombre !== undefined) cambios.nombre = String(req.body.nombre).trim().slice(0, 80);
+  if (req.body?.nombre !== undefined) cambios.nombre = String(req.body.nombre ?? '').trim().slice(0, 80);
   if (req.body?.rol !== undefined) cambios.rol = rolValido(req.body.rol);
-  if (req.body?.activo !== undefined) cambios.activo = Boolean(req.body.activo);
+  if (req.body?.activo !== undefined) {
+    if (typeof req.body.activo !== 'boolean') throw new HttpError(400, 'activo va true o false (sin comillas).');
+    cambios.activo = req.body.activo;
+  }
   if (req.body?.clave !== undefined) cambios.claveHash = await hashear(claveValida(req.body.clave));
 
   // No dejar el sistema sin ningún administrador activo

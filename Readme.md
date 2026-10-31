@@ -120,6 +120,18 @@ Si la copia se corta, se vuelve a ejecutar lo mismo y retoma. Al final compara
 la cantidad de filas de cada mes en las dos bases. La API apunta a TiDB
 cambiando `DB_HOST`, `DB_PORT=4000`, `DB_USER` (con el prefijo) y `DB_SSL=true`.
 
+## Pruebas
+
+```bash
+cd api
+npm install
+npm test        # 26 pruebas: unitarias y de integración
+```
+
+Las de integración usan la base de `api/.env` (de desarrollo, nunca la de
+producción). Qué prueba cada una y la evidencia de la última ejecución:
+[`docs/pruebas/`](docs/pruebas/README.md).
+
 ## Usuarios y login (JWT)
 
 La guía completa para el front está en [`docs/API.md`](docs/API.md).

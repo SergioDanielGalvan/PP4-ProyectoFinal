@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "usuario": "node scripts/crear-usuario.js"
+    "usuario": "node scripts/crear-usuario.js",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test:unit": "node --test \"test/unit/*.test.js\"",
+    "test:integracion": "node --test --test-concurrency=1 \"test/integracion/*.test.js\""
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -17,5 +20,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.4"
   }
 }

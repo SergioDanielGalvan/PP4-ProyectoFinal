@@ -1,0 +1,38 @@
+▶ Precios por partida contra la base
+  ✔ la partida completa suma lo mismo en la API y en la base (11.309499ms)
+  ✔ el filtro por país de origen devuelve sólo ese origen y la misma suma (7.272409ms)
+  ✔ un código incompleto se rechaza con un mensaje claro (400) (3.636817ms)
+✔ Precios por partida contra la base (249.372856ms)
+▶ CRUD de usuarios
+  ✔ sin token no se puede administrar usuarios (401) (6.413993ms)
+  ✔ CREATE: el alta queda guardada en la base (94.349705ms)
+  ✔ CREATE: rechaza el usuario duplicado (409) y el nombre vacío (400) (202.782673ms)
+  ✔ READ: la lista incluye el usuario creado (4.744645ms)
+  ✔ UPDATE: el cambio de nombre y de clave se guarda y la clave nueva sirve para ingresar (265.211803ms)
+  ✔ DELETE: un usuario que ya ingresó no se elimina (409); se desactiva (93.691946ms)
+  ✔ DELETE: un usuario que nunca ingresó se elimina de la base (96.9054ms)
+✔ CRUD de usuarios (976.450165ms)
+✔ acepta partida, subpartida y NCM completas, con o sin puntos (1.034299ms)
+✔ rechaza códigos incompletos con un error 400 (0.407506ms)
+✔ arma el rango completando con 0 y con 9 (0.706838ms)
+✔ rechaza un rango invertido (0.206353ms)
+✔ calcula la letra verificadora de despachos reales (1.098807ms)
+✔ acepta el número completo y completa la letra si falta (0.852385ms)
+✔ rechaza una letra verificadora equivocada e indica la correcta (0.212642ms)
+✔ rechaza largo, año, aduana o número mal formados (0.143145ms)
+✔ permite consultas de lectura (1.601231ms)
+✔ rechaza sentencias que modifican datos (0.483748ms)
+✔ rechaza dos sentencias juntas, aunque la segunda esté después de un comentario (1.029886ms)
+✔ rechaza leer la tabla de usuarios y las funciones peligrosas (0.303529ms)
+✔ rechaza una consulta vacía (0.386738ms)
+✔ normaliza el nombre de usuario a minúsculas y valida los caracteres (1.203573ms)
+✔ exige claves de 10 a 72 caracteres (0.253826ms)
+✔ sólo acepta los roles admin y consulta (0.13633ms)
+ℹ tests 26
+ℹ suites 2
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2265.370324
