@@ -353,13 +353,16 @@ tr.fila-clic:hover td { background-color: #eef4ff; }
 }
 
 /* ---------- tablero ---------- */
-.tablero-cabecera { background: #1e2a4a; color: #fff; }
+.tablero-cabecera { background: linear-gradient(120deg, var(--sello) 0%, #2a78d6 100%); color: #fff; }
 .kpi {
   background: var(--hoja, #fff); border: 1px solid #e2e8f0; border-radius: 10px;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06); padding: 0.9rem 1.1rem; height: 100%;
   display: flex; align-items: center; gap: 0.9rem;
 }
-.kpi .icono { font-size: 2rem; color: #1e2a4a; }
+.kpi .icono {
+  font-size: 1.5rem; color: var(--sello); background: #e8f0fd; border-radius: 50%;
+  width: 3rem; height: 3rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
 .kpi .valor { font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: #0f172a; }
 .kpi .nombre { font-size: 0.85rem; color: #475569; }
 .kpi .variacion { font-size: 0.78rem; font-weight: 600; }

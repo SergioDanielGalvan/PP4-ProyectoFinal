@@ -1594,8 +1594,10 @@ cargarPeriodos().then(cargarTablero);   // el Tablero es la pestaña de inicio; 
 // mensual, ranking de NCM y de aduanas. Todo se puede tocar: un país filtra el
 // tablero, un mes cambia el período, una NCM o una aduana abre sus despachos.
 const tbEstado = { periodo: undefined, pais: '', ncm: '', datos: null, graficos: [], pedido: 0, filtrosListos: false };
-const PALETA_MOSAICO = ['#1e3a5f', '#c9b26b', '#4f9d69', '#2ab0e0', '#f2df8f', '#3b6ea5', '#3f7a46', '#8b1e24', '#9aa5b1', '#a9d6f5', '#cbd5e1'];
-const TEXTO_OSCURO = new Set(['#c9b26b', '#f2df8f', '#a9d6f5', '#cbd5e1', '#9aa5b1']);
+// Paleta propia de la página: la de la Matriz más tres tonos, y gris para "Resto"
+const PALETA_MOSAICO = [...COLORES, '#0e9aa7', '#b4552d', '#5b6b74', GRIS_RESTO];
+const TEXTO_OSCURO = new Set(['#eda100', '#e87ba4', GRIS_RESTO]);
+const AZUL_TABLERO = '#2a78d6';
 const enMillones = (v) => fmtNum.format(Math.round(v / 1e5) / 10);
 
 function prepararFiltrosTablero() {
@@ -1671,7 +1673,7 @@ function dibujarTablero(d) {
 
   dibujarMosaico($('#tb-mosaico'), d.paises);
 
-  const color = '#1e3a5f';
+  const color = AZUL_TABLERO;
   const ejeMillones = { grid: { color: '#e3e8e6' }, border: { display: false }, ticks: { color: '#5b6b74', callback: (v) => enMillones(v) } };
   const cursor = (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; };
 
@@ -1680,7 +1682,7 @@ function dibujarTablero(d) {
     type: 'bar',
     data: {
       labels: d.meses.map((m) => mes(m.periodo)),
-      datasets: [{ data: d.meses.map((m) => m.fob), backgroundColor: d.meses.map((m) => (!periodo() || String(m.periodo) === periodo() ? color : '#94a3b8')), borderRadius: 3 }],
+      datasets: [{ data: d.meses.map((m) => m.fob), backgroundColor: d.meses.map((m) => (!periodo() || String(m.periodo) === periodo() ? color : '#bcd3f2')), borderRadius: 3 }],
     },
     options: {
       maintainAspectRatio: false, animation: false,
@@ -1717,7 +1719,7 @@ function dibujarTablero(d) {
   // Aduanas: clic = despachos de esa aduana con los filtros del tablero
   tbEstado.graficos.push(new Chart($('#tb-aduanas'), {
     type: 'bar',
-    data: { labels: d.aduanas.map((x) => `${x.descrip || x.codigo} (${x.codigo})`), datasets: [{ data: d.aduanas.map((x) => x.fob), backgroundColor: '#3b6ea5', borderRadius: 2 }] },
+    data: { labels: d.aduanas.map((x) => `${x.descrip || x.codigo} (${x.codigo})`), datasets: [{ data: d.aduanas.map((x) => x.fob), backgroundColor: '#1baf7a', borderRadius: 2 }] },
     options: {
       indexAxis: 'y', maintainAspectRatio: false, animation: false,
       scales: { x: { ...ejeMillones, position: 'top' }, y: { grid: { display: false }, ticks: { color: '#1d2b36', font: { size: 11 }, autoSkip: false } } },
@@ -1738,7 +1740,7 @@ function dibujarMosaico(contenedor, paises) {
   const W = contenedor.clientWidth || 600;
   const H = contenedor.clientHeight || 340;
   const total = paises.reduce((s, p) => s + p.fob, 0);
-  const items = paises.map((p, i) => ({ ...p, area: (p.fob / total) * W * H, color: p.codigo ? PALETA_MOSAICO[i % 10] : PALETA_MOSAICO[10] }));
+  const items = paises.map((p, i) => ({ ...p, area: (p.fob / total) * W * H, color: p.codigo ? PALETA_MOSAICO[i % 10] : GRIS_RESTO }));
   const celdas = [];
   let x = 0; let y = 0; let w = W; let h = H;
   const peor = (fila, lado) => {
