@@ -69,11 +69,13 @@ administración y el SQL libre exigen token de admin **siempre**.
 | `GET /impo/subpartidas` | `desde`, `hasta`, `periodo`, `limite` | resumen por NCM |
 | `GET /impo/ncm/:ncm/precios` | `periodo` o `desde`/`hasta`, `region`, `paises`, `aduanas` (ver filtros) | valores unitarios por origen y unidad; `nivel` y, fuera de NCM, `posiciones` (cuántas NCM entran en cada fila) |
 | `GET /impo/ncm/:ncm/valores-bajos` | los mismos filtros, `umbral`, `limite` | ítems bajo el umbral, cada uno contra el promedio de su propia NCM y unidad; incluye `ncm` |
-| `GET /impo/importadores` | `q`, `periodo` | despachos, ítems y FOB por importador |
+| `GET /impo/importadores` | `q`, `periodo` | despachos, ítems y FOB por importador (hasta 50, los de mayor FOB) |
+| `GET /impo/importadores/ranking` | `periodo`, `q` (texto en el nombre, opcional), `orden` (`fob`, `nombre`, `despachos`, `items`), `dir` (`desc`/`asc`), `desde` (0), `limite` (100; hasta 100.000 para exportar todo) | `{ total, total_fob, desde, filas: [{ id, nombre, despachos, items, fob_usd, participacion }] }`. Todos los importadores del período, por partes. El ranking se calcula una vez por período y se guarda 10 minutos |
+| `GET /impo/importadores/:id/despachos` | `periodo`, `orden` (`fecha`, `despacho`, `items`, `fob`), `dir`, `desde`, `limite` (100) | `{ importador: { id, nombre, despachos, items, fob_usd }, total, desde, filas: [{ nro_despacho, periodo, destinacion, aduana, aduana_desc, pais_procedencia, pais_procedencia_desc, items, fob_usd }] }`; 404 si no existe |
 | `GET /impo/triangulaciones` | `periodo`, `ncm` (4, 6 u 8 dígitos), `origen`, `procedencia` (códigos de país), `excluir_zonas` (por defecto `1`: excluye el AAE de Tierra del Fuego y las zonas francas argentinas; `0` o `false` las incluye), `orden` (`ncm`, `origen`, `procedencia`, `items`, `fob`), `dir` (`asc`/`desc`), `limite` (50, hasta 500) | ítems con origen distinto de su procedencia (la del ítem) |
 | `GET /impo/sugerencias/despachos` | `prefijo` (5 a 16 caracteres: año y aduana como mínimo), `periodo`, `limite` (15) | `[{ nro_despacho, periodo, importador }]` |
 | `GET /impo/sugerencias/ncm` | `q`: 2 a 8 dígitos con o sin puntos (`847130`, `8471.30`) o 3 letras de la descripción; `limite` (15) | `[{ ncm, descripcion }]` (descripción cortada a 120 caracteres) |
-| `GET /impo/sugerencias/importadores` | `q` (3 letras o más), `limite` (15) | `[{ nombre }]`, primero los que empiezan con el texto |
+| `GET /impo/sugerencias/importadores` | `q` (3 letras o más), `limite` (15) | `[{ id, nombre }]`, primero los que empiezan con el texto |
 
 `periodo` es AAAAMM (`202608`). Montos en US$ FOB.
 

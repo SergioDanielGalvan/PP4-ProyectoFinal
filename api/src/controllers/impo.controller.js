@@ -132,6 +132,39 @@ const buscarImportadores = handler(async (req, res) => {
   res.json(await model.buscarImportadores(q, periodoOpcional(req.query.periodo)));
 });
 
+// Grilla de importadores: GET /importadores/ranking?periodo&q&orden&dir&desde&limite
+const listarImportadores = handler(async (req, res) => {
+  const q = req.query;
+  const orden = q.orden || 'fob';
+  if (!model.ORDEN_IMPORTADORES[orden]) throw new HttpError(400, 'orden va nombre, despachos, items o fob.');
+  res.json(await model.listarImportadores({
+    periodo: periodoOpcional(q.periodo),
+    q: (q.q || '').trim() || null,
+    orden,
+    dir: q.dir === 'asc' ? 'asc' : 'desc',
+    desde: entero(q.desde, 0, 0, 10_000_000),
+    limite: entero(q.limite, 100, 1, 100_000),   // el CSV pide la lista completa
+  }));
+});
+
+// Despachos de un importador: GET /importadores/:id/despachos?periodo&orden&dir&desde&limite
+const despachosDeImportador = handler(async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1 || String(id) !== req.params.id) throw new HttpError(400, 'El importador se indica con su número interno.');
+  const q = req.query;
+  const orden = q.orden || 'fecha';
+  if (!model.ORDEN_DESPACHOS_IMPORTADOR[orden]) throw new HttpError(400, 'orden va fecha, despacho, items o fob.');
+  const r = await model.despachosDeImportador(id, {
+    periodo: periodoOpcional(q.periodo),
+    orden,
+    dir: q.dir === 'asc' ? 'asc' : 'desc',
+    desde: entero(q.desde, 0, 0, 10_000_000),
+    limite: entero(q.limite, 100, 1, 100_000),
+  });
+  if (!r) throw new HttpError(404, 'No existe ese importador.');
+  res.json(r);
+});
+
 const triangulaciones = handler(async (req, res) => {
   const q = req.query;
   const pais = (v, nombre) => {
@@ -195,6 +228,8 @@ const sugerirImportadores = handler(async (req, res) => {
 });
 
 module.exports = {
+  listarImportadores,
+  despachosDeImportador,
   matriz,
   periodos,
   resumenSubpartidas,

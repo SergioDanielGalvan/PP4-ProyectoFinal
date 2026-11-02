@@ -335,6 +335,23 @@ th button.orden:focus-visible {
   th button.orden { color: inherit; }
 }
 
+/* ---------- grilla con barra de desplazamiento (Importadores) ---------- */
+.grilla-scroll {
+  max-height: 65vh;
+  overflow: auto;
+  margin-bottom: 0.25rem;
+}
+.grilla-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+tr.fila-clic { cursor: pointer; }
+tr.fila-clic:hover td { background-color: #eef4ff; }
+@media print {
+  .grilla-scroll { max-height: none; overflow: visible; }
+}
+
 /* ---------- autocompletado ---------- */
 .ac {
   position: relative;

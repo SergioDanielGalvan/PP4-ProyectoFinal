@@ -146,6 +146,7 @@ document.querySelectorAll('[role="tab"]').forEach((tab) => {
     document.querySelectorAll('[role="tab"]').forEach((t) => t.setAttribute('aria-selected', t === tab));
     document.querySelectorAll('.panel').forEach((p) => { p.hidden = p.id !== tab.dataset.panel; });
     if (tab.dataset.panel === 'p-triangulaciones') cargarTriangulaciones();
+    if (tab.dataset.panel === 'p-importadores' && (!impEstado.cargada || impEstado.periodo !== periodo())) cargarImportadores();
     if (tab.dataset.panel === 'p-matriz' && !matrizEstado.cargada) cargarMatriz();
     if (tab.dataset.panel === 'p-usuarios') cargarUsuarios();
     if (tab.dataset.panel === 'p-actividad') abrirActividad();
@@ -169,6 +170,7 @@ $('#periodo').addEventListener('change', () => {
   cargarLista();
   const activo = document.querySelector('[aria-selected="true"]').dataset.panel;
   if (activo === 'p-triangulaciones') cargarTriangulaciones();
+  if (activo === 'p-importadores') cargarImportadores();
 });
 
 // ---------- despacho ----------
@@ -687,117 +689,239 @@ $('#b-limpiar-ncm').addEventListener('click', () => {
 
 
 // ---------- importadores ----------
-$('#f-importadores').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const destino = $('#r-importadores');
-  const busqueda = $('#q').value.trim();
-  if (busqueda.length < 3) return mensaje(destino, 'Escribí al menos 3 letras del nombre del importador.', true);
+// Grilla de todos los importadores del período, ordenable por columna, con
+// barra de desplazamiento: trae de a 100 filas y pide las siguientes al llegar
+// al final. Al elegir un importador (de la lista de sugerencias o con un clic
+// en la grilla) se ven sus despachos, con la misma grilla. "Buscar" con un
+// texto filtra la grilla por nombre.
+const IMP_COLUMNAS = [
+  { orden: 'nombre', titulo: 'Importador' }, { orden: 'despachos', titulo: 'Despachos', n: true },
+  { orden: 'items', titulo: 'Ítems', n: true }, { orden: 'fob', titulo: 'FOB US$', n: true },
+  { titulo: 'Participación', n: true },
+];
+const IMPD_COLUMNAS = [
+  { orden: 'despacho', titulo: 'Despacho' }, { orden: 'fecha', titulo: 'Período' }, { titulo: 'Destinación' },
+  { titulo: 'Aduana' }, { titulo: 'Procedencia' }, { orden: 'items', titulo: 'Ítems', n: true }, { orden: 'fob', titulo: 'FOB US$', n: true },
+];
+const PARTE = 100;
+const impEstado = {
+  vista: 'lista', q: '', orden: 'fob', dir: 'desc',             // grilla de importadores
+  importador: null, ordenD: 'fecha', dirD: 'desc',              // despachos de uno
+  filas: [], total: 0, totalFob: 0, cargando: false, periodo: null, cargada: false, pedido: 0,
+};
+let observadorImp = null;
+const pct2 = (v) => `${fmtNum.format(Math.round(v * 10000) / 100)} %`;
 
-  try {
-    const rows = await api('/importadores', { q: busqueda, periodo: periodo() });
-    if (rows.length === 0) return mensaje(destino, 'Ningún importador coincide con ese nombre en el periodo elegido.');
+function encabezadosOrdenables(columnas, orden, dir) {
+  return columnas.map((c) => {
+    if (!c.orden) return { n: c.n, titulo: c.titulo };
+    const activa = c.orden === orden;
+    const flecha = activa ? (dir === 'asc' ? ' ▲' : ' ▼') : '';
+    const sentido = activa ? (dir === 'asc' ? 'ascending' : 'descending') : 'none';
+    return { n: c.n, titulo: `<button type="button" class="orden${activa ? ' activa' : ''}" data-orden="${c.orden}" aria-sort="${sentido}" title="Ordenar por ${c.titulo}">${c.titulo}${flecha}</button>` };
+  });
+}
 
-    const totalDespachos = rows.reduce((s, r) => s + (r.despachos || 0), 0);
-    const totalItems = rows.reduce((s, r) => s + (r.items || 0), 0);
-    const totalFob = rows.reduce((s, r) => s + (r.fob_usd || 0), 0);
+function filaImportador(r) {
+  return `<tr class="fila-clic" data-id="${r.id}" title="Ver los despachos de ${esc(r.nombre)}">
+    <td>${esc(r.nombre)}</td><td class="n">${num(r.despachos)}</td><td class="n">${num(r.items)}</td>
+    <td class="n">${usd(r.fob_usd)}</td><td class="n">${pct2(r.participacion)}</td></tr>`;
+}
 
-    const filas = rows.map((r) => `
-      <tr>
-        <td>${esc(r.nombre)}</td>
-        <td class="n">${num(r.despachos)}</td>
-        <td class="n">${num(r.items)}</td>
-        <td class="n">${usd(r.fob_usd)}</td>
-      </tr>`);
+function filaDespachoImp(d) {
+  return `<tr class="fila-clic" data-nro="${esc(d.nro_despacho)}" title="Ver el despacho">
+    <td class="codigo">${esc(d.nro_despacho)}</td><td>${esc(mes(d.periodo))}</td><td class="codigo">${esc(d.destinacion)}</td>
+    <td>${codigo(d.aduana, d.aduana_desc)}</td><td>${codigo(d.pais_procedencia, d.pais_procedencia_desc)}</td>
+    <td class="n">${num(d.items)}</td><td class="n">${usd(d.fob_usd)}</td></tr>`;
+}
 
-    filas.push(`
-      <tr class="total">
-        <td>Total (${rows.length} empresas)</td>
-        <td class="n">${num(totalDespachos)}</td>
-        <td class="n">${num(totalItems)}</td>
-        <td class="n">${usd(totalFob)}</td>
-      </tr>`);
-
-    const barraAcciones = `
-      <div class="despacho-acciones" style="margin: 1.25rem 0 0.75rem 0; display: flex; justify-content: flex-end; gap: 0.5rem;">
-        <button type="button" id="b-importadores-excel" class="btn-secundario">Exportar (CSV)</button>
-        <button type="button" id="b-importadores-pdf" class="btn-secundario">Imprimir</button>
-      </div>`;
-
-    const encabezadoReporte = `
-      <div class="reporte-print-header" style="margin-bottom: 0.75rem;">
-        <h2 style="margin: 0 0 0.25rem 0;">Consulta de Importadores</h2>
-        <p style="margin: 0; color: #555; font-size: 0.9rem;">
-          <strong>Búsqueda:</strong> "${esc(busqueda)}" · <strong>Período:</strong> ${periodo() ? mes(periodo()) : 'Todos'}
-        </p>
-      </div>`;
-
-    destino.innerHTML = barraAcciones + encabezadoReporte + tabla([
-      { titulo: 'Importador' }, { titulo: 'Despachos', n: true }, { titulo: 'Ítems', n: true },
-      { titulo: 'FOB', n: true },
-    ], filas);
-
-    // Evento Imprimir / PDF
-    const btnImpPdf = document.getElementById('b-importadores-pdf');
-    if (btnImpPdf) {
-      btnImpPdf.onclick = () => {
-        const titOriginal = document.title;
-        document.title = `Importadores_${busqueda}`;
-        window.print();
-        document.title = titOriginal;
-      };
-    }
-
-    // Evento Exportar Excel (CSV)
-    const btnImpXls = document.getElementById('b-importadores-excel');
-    if (btnImpXls) {
-      btnImpXls.onclick = () => {
-        const limpiar = (val) => {
-          if (val === null || val === undefined) return '';
-          return String(val).split('"').join('""').split('\n').join(' ').split('\r').join('').trim();
-        };
-
-        const lineas = [
-          ['SISTEMA COMEX - LISTADO DE IMPORTADORES'],
-          ['Criterio de busqueda', busqueda],
-          ['Periodo', periodo() ? mes(periodo()) : 'Todos'],
-          [],
-          ['Importador', 'Despachos', 'Items', 'FOB USD']
-        ];
-
-        rows.forEach((r) => {
-          lineas.push([
-            r.nombre,
-            r.despachos,
-            r.items,
-            importe(r.fob_usd)
-          ]);
-        });
-
-        lineas.push([]);
-        lineas.push(['TOTAL', totalDespachos, totalItems, importe(totalFob)]);
-
-        const csvContent = '\uFEFF' + lineas
-          .map((fila) => fila.map((col) => '"' + limpiar(col) + '"').join(';'))
-          .join('\r\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const enlace = document.createElement('a');
-        enlace.href = URL.createObjectURL(blob);
-        enlace.setAttribute('download', `Importadores_${busqueda}.csv`);
-        document.body.appendChild(enlace);
-        enlace.click();
-        document.body.removeChild(enlace);
-        setTimeout(() => URL.revokeObjectURL(enlace.href), 1000);
-      };
-    }
-  } catch (err) {
-    mensaje(destino, err.message, true);
+// Pide una parte (desde = filas ya cargadas) de la grilla que se esté viendo
+function pedirParte(desde, limite = PARTE) {
+  if (impEstado.vista === 'lista') {
+    return api('/importadores/ranking', { periodo: periodo(), q: impEstado.q, orden: impEstado.orden, dir: impEstado.dir, desde, limite });
   }
+  return api(`/importadores/${impEstado.importador.id}/despachos`, { periodo: periodo(), orden: impEstado.ordenD, dir: impEstado.dirD, desde, limite });
+}
+
+async function cargarImportadores() {
+  const destino = $('#r-importadores');
+  const pedido = ++impEstado.pedido;     // si llega una respuesta vieja (otro orden, otro período), se descarta
+  impEstado.cargada = true;
+  impEstado.periodo = periodo();
+  impEstado.filas = [];
+  if (observadorImp) observadorImp.disconnect();
+  destino.innerHTML = `<p class="nota">${impEstado.vista === 'lista' ? 'Armando el ranking de importadores del período (la primera vez tarda unos segundos)…' : 'Buscando los despachos…'}</p>`;
+  try {
+    const r = await pedirParte(0);
+    if (pedido !== impEstado.pedido) return;
+    if (impEstado.vista === 'importador') impEstado.importador = r.importador;
+    impEstado.total = r.total;
+    impEstado.totalFob = r.total_fob;
+    impEstado.filas = r.filas;
+    dibujarGrillaImportadores();
+  } catch (err) {
+    if (pedido === impEstado.pedido) mensaje(destino, err.message, true);
+  }
+}
+
+function dibujarGrillaImportadores() {
+  const destino = $('#r-importadores');
+  const lista = impEstado.vista === 'lista';
+  const per = periodo() ? mes(periodo()) : 'todos los períodos';
+  if (!impEstado.filas.length) {
+    return mensaje(destino, lista
+      ? (impEstado.q ? `Ningún importador con "${impEstado.q}" en ${per}.` : `No hay importaciones en ${per}.`)
+      : `${impEstado.importador.nombre} no tiene despachos en ${per}.`);
+  }
+  let cabecera;
+  if (lista) {
+    cabecera = `<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-2">
+      <div><h3 class="h6 fw-bold mb-1">Importadores · ${esc(per)}${impEstado.q ? ` · nombre con "${esc(impEstado.q)}"` : ''}</h3>
+        <p class="small text-secondary mb-0"><span id="imp-contador"></span> · FOB total del período ${usd(impEstado.totalFob)} · Clic en un importador para ver sus despachos</p></div>
+      <button type="button" id="b-importadores-excel" class="btn btn-sm btn-outline-secondary">Exportar (CSV)</button></div>`;
+  } else {
+    const i = impEstado.importador;
+    cabecera = `<nav class="small mb-2"><a href="#" id="imp-volver"><i class="bi bi-arrow-left"></i> Todos los importadores</a></nav>
+      <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-2">
+      <div><h3 class="h5 fw-bold mb-1">${esc(i.nombre)}</h3>
+        <p class="small text-secondary mb-0">${esc(per[0].toUpperCase() + per.slice(1))} · <span id="imp-contador"></span> · ${num(i.items)} ítems · FOB ${usd(i.fob_usd)} · Clic en un despacho para ver el detalle</p></div>
+      <button type="button" id="b-importadores-excel" class="btn btn-sm btn-outline-secondary">Exportar (CSV)</button></div>`;
+  }
+  const columnas = lista
+    ? encabezadosOrdenables(IMP_COLUMNAS, impEstado.orden, impEstado.dir)
+    : encabezadosOrdenables(IMPD_COLUMNAS, impEstado.ordenD, impEstado.dirD);
+  const filas = impEstado.filas.map(lista ? filaImportador : filaDespachoImp);
+  destino.innerHTML = cabecera + tabla(columnas, filas).replace('<div class="tabla">', '<div class="tabla grilla-scroll" id="imp-grilla">')
+    + '<div id="imp-fin" class="small text-secondary text-center py-1"></div>';
+  actualizarContador();
+  vigilarFinal();
+}
+
+function actualizarContador() {
+  const c = $('#imp-contador');
+  const nombre = impEstado.vista === 'lista' ? 'importadores' : 'despachos';
+  if (c) c.textContent = `${num(impEstado.total)} ${nombre}${impEstado.filas.length < impEstado.total ? ` · mostrando ${num(impEstado.filas.length)}` : ''}`;
+  const fin = $('#imp-fin');
+  if (fin) fin.textContent = impEstado.filas.length < impEstado.total ? 'Bajá en la grilla para ver más…' : '';
+}
+
+// Al acercarse al final de la grilla, trae la parte siguiente
+function vigilarFinal() {
+  const grilla = $('#imp-grilla');
+  const tbody = grilla && grilla.querySelector('tbody');
+  if (!tbody || impEstado.filas.length >= impEstado.total) return;
+  const centinela = document.createElement('tr');
+  centinela.id = 'imp-centinela';
+  centinela.innerHTML = `<td colspan="${tbody.rows[0].cells.length}" class="text-center text-secondary small">Cargando…</td>`;
+  tbody.append(centinela);
+  observadorImp = new IntersectionObserver(async (entradas) => {
+    if (!entradas[0].isIntersecting || impEstado.cargando) return;
+    impEstado.cargando = true;
+    const pedido = impEstado.pedido;
+    try {
+      const r = await pedirParte(impEstado.filas.length);
+      if (pedido !== impEstado.pedido) return;
+      impEstado.filas.push(...r.filas);
+      centinela.insertAdjacentHTML('beforebegin', r.filas.map(impEstado.vista === 'lista' ? filaImportador : filaDespachoImp).join(''));
+      actualizarContador();
+      if (impEstado.filas.length >= impEstado.total || !r.filas.length) { observadorImp.disconnect(); centinela.remove(); }
+    } catch (err) {
+      centinela.cells[0].textContent = `No se pudieron traer más filas: ${err.message}`;
+      observadorImp.disconnect();
+    } finally {
+      impEstado.cargando = false;
+    }
+  }, { root: grilla, rootMargin: '0px 0px 300px 0px' });
+  observadorImp.observe(centinela);
+}
+
+function abrirImportador(id, nombre) {
+  impEstado.vista = 'importador';
+  impEstado.importador = { id, nombre };
+  impEstado.ordenD = 'fecha';
+  impEstado.dirD = 'desc';
+  cargarImportadores();
+}
+
+function volverALista() {
+  impEstado.vista = 'lista';
+  impEstado.importador = null;
+  cargarImportadores();
+}
+
+// CSV con la lista completa (no sólo lo cargado en pantalla), con el orden elegido
+async function exportarImportadores() {
+  const boton = $('#b-importadores-excel');
+  boton.disabled = true;
+  boton.textContent = 'Preparando…';
+  try {
+    const r = await pedirParte(0, 100000);
+    const per = periodo() ? mes(periodo()) : 'Todos';
+    const lista = impEstado.vista === 'lista';
+    const lineas = lista
+      ? [['SISTEMA COMEX - IMPORTADORES'], ['Periodo', per], ...(impEstado.q ? [['Nombre con', impEstado.q]] : []), [],
+        ['Importador', 'Despachos', 'Items', 'FOB USD', 'Participacion %'],
+        ...r.filas.map((x) => [x.nombre, x.despachos, x.items, importe(x.fob_usd), importe(x.participacion * 100)])]
+      : [['SISTEMA COMEX - DESPACHOS DE UN IMPORTADOR'], ['Importador', r.importador.nombre], ['Periodo', per], [],
+        ['Despacho', 'Periodo', 'Destinacion', 'Aduana', 'Procedencia', 'Items', 'FOB USD'],
+        ...r.filas.map((x) => [x.nro_despacho, mes(x.periodo), x.destinacion, `${x.aduana} ${x.aduana_desc || ''}`.trim(),
+          `${x.pais_procedencia || ''} ${x.pais_procedencia_desc || ''}`.trim(), x.items, importe(x.fob_usd)])];
+    const csv = '﻿' + lineas.map((f) => f.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const sufijo = lista ? (impEstado.q || 'todos') : r.importador.nombre.replace(/[^\w]+/g, '_').slice(0, 40);
+    enlace.download = `Importadores_${sufijo}_${periodo() || 'todos'}.csv`;
+    enlace.click();
+    setTimeout(() => URL.revokeObjectURL(enlace.href), 1000);
+  } catch (err) {
+    alert(`No se pudo exportar: ${err.message}`);   // eslint-disable-line no-alert
+  } finally {
+    boton.disabled = false;
+    boton.textContent = 'Exportar (CSV)';
+  }
+}
+
+$('#r-importadores').addEventListener('click', (e) => {
+  const orden = e.target.closest('button.orden');
+  if (orden) {
+    const lista = impEstado.vista === 'lista';
+    const clave = lista ? 'orden' : 'ordenD';
+    const sentido = lista ? 'dir' : 'dirD';
+    const col = orden.dataset.orden;
+    if (impEstado[clave] === col) impEstado[sentido] = impEstado[sentido] === 'asc' ? 'desc' : 'asc';
+    else { impEstado[clave] = col; impEstado[sentido] = col === 'nombre' || col === 'despacho' ? 'asc' : 'desc'; }
+    return cargarImportadores();
+  }
+  if (e.target.closest('#b-importadores-excel')) return exportarImportadores();
+  if (e.target.closest('#imp-volver')) { e.preventDefault(); return volverALista(); }
+  const fila = e.target.closest('tr.fila-clic');
+  if (!fila) return;
+  if (fila.dataset.id) return abrirImportador(Number(fila.dataset.id), fila.cells[0].textContent);
+  if (fila.dataset.nro) {
+    // Abre el despacho en su pestaña
+    document.querySelector('[data-panel="p-despacho"]').click();
+    $('#nro').value = fila.dataset.nro;
+    mostrarDespacho(fila.dataset.nro);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+});
+
+$('#f-importadores').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const busqueda = $('#q').value.trim();
+  if (busqueda && busqueda.length < 3) return mensaje($('#r-importadores'), 'Escribí al menos 3 letras del nombre del importador, o dejalo vacío para ver todos.', true);
+  impEstado.vista = 'lista';
+  impEstado.q = busqueda;
+  cargarImportadores();
 });
 
 $('#b-limpiar-importadores').addEventListener('click', () => {
   $('#q').value = '';
-  $('#r-importadores').innerHTML = '';
+  impEstado.q = '';
+  impEstado.vista = 'lista';
+  impEstado.orden = 'fob';
+  impEstado.dir = 'desc';
+  cargarImportadores();
   $('#q').focus();
 });
 
@@ -1340,8 +1464,9 @@ autocompletar($('#nro'), {
 // Importador: desde 3 letras
 autocompletar($('#q'), {
   minimo: (t) => t.length >= 3,
-  buscar: async (t) => (await api('/sugerencias/importadores', { q: t })).map((i) => ({ valor: i.nombre })),
-  alElegir: () => $('#f-importadores').requestSubmit(),
+  buscar: async (t) => (await api('/sugerencias/importadores', { q: t })).map((i) => ({ valor: i.nombre, id: i.id })),
+  // Elegir uno de la lista muestra sus despachos; "Buscar" con un texto filtra la grilla
+  alElegir: (op) => abrirImportador(op.id, op.valor),
 });
 
 // NCM: 2 dígitos o más (con o sin puntos) o 3 letras de la descripción

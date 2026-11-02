@@ -180,6 +180,8 @@ Sin la tabla, la API funciona igual y avisa una vez en el log.
 | `GET /api/impo/ncm/:ncm/precios` | `periodo` | valor unitario mínimo, promedio y máximo por origen y unidad |
 | `GET /api/impo/ncm/:ncm/valores-bajos` | `periodo`, `umbral` (0-1), `limite` | ítems con valor unitario bajo el umbral del promedio |
 | `GET /api/impo/importadores` | `q` (mín. 3 letras), `periodo` | despachos, ítems y FOB |
+| `GET /api/impo/importadores/ranking` | `periodo`, `q`, `orden`, `dir`, `desde`, `limite` | todos los importadores del período, por partes |
+| `GET /api/impo/importadores/:id/despachos` | `periodo`, `orden`, `dir`, `desde`, `limite` | despachos de un importador, por partes |
 | `GET /api/impo/triangulaciones` | `periodo`, `limite` | ítems con origen distinto de la procedencia |
 | `POST /api/auth/login` | `usuario`, `clave` | token JWT (ver `docs/API.md` para el resto de `/api/auth`) |
 | `GET /api/consultas` | | catálogo de consultas SQL guardadas |

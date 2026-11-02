@@ -465,7 +465,7 @@ async function sugerirNcm({ prefijo, texto, limite }) {
 // Nombres de importadores: primero los que empiezan con el texto.
 async function sugerirImportadores(texto, limite) {
   const [rows] = await pool.query(`
-    SELECT Nombre AS nombre
+    SELECT IdImportador AS id, Nombre AS nombre
     FROM importadores
     WHERE Nombre LIKE ?
     ORDER BY (Nombre LIKE ?) DESC, Nombre
@@ -473,7 +473,100 @@ async function sugerirImportadores(texto, limite) {
   return rows;
 }
 
+// ---------- grilla de importadores ----------
+// Ranking de todos los importadores del período (despachos, ítems y FOB en
+// US$). Sumar 1,6 M de ítems tarda unos segundos en TiDB: se calcula una vez
+// por período y se guarda 10 minutos; el orden, el filtro y la carga por partes
+// salen de esa copia. Si dos pedidos llegan juntos, comparten el mismo cálculo.
+const CACHE_IMPORTADORES_MS = 10 * 60 * 1000;
+const cacheImportadores = new Map();   // periodo ('' = todos) -> { hora, promesa }
+
+function rankingImportadores(periodo) {
+  const clave = periodo === null ? '' : String(periodo);
+  const guardado = cacheImportadores.get(clave);
+  if (guardado && Date.now() - guardado.hora < CACHE_IMPORTADORES_MS) return guardado.promesa;
+  const params = [];
+  const promesa = pool.query(`
+    SELECT imp.IdImportador AS id, imp.Nombre AS nombre,
+           COUNT(DISTINCT c.IdOperacion) AS despachos,
+           COUNT(*)                      AS items,
+           SUM(i.FobTotalDolares)        AS fob_usd
+    FROM caratula c
+    JOIN item         i   ON i.IdOperacion = c.IdOperacion AND i.Periodo = c.Periodo
+    JOIN importadores imp ON imp.IdImportador = c.IdImportador
+    WHERE 1 = 1${filtroPeriodo('c', periodo, params)}
+    GROUP BY imp.IdImportador, imp.Nombre`, params)
+    .then(([filas]) => {
+      const totalFob = filas.reduce((s, f) => s + Number(f.fob_usd || 0), 0);
+      for (const f of filas) f.participacion = totalFob ? Number(f.fob_usd || 0) / totalFob : 0;
+      return { filas, totalFob };
+    })
+    .catch((err) => { cacheImportadores.delete(clave); throw err; });
+  cacheImportadores.set(clave, { hora: Date.now(), promesa });
+  return promesa;
+}
+
+const ORDEN_IMPORTADORES = {
+  nombre: (a, b) => a.nombre.localeCompare(b.nombre, 'es'),
+  despachos: (a, b) => a.despachos - b.despachos,
+  items: (a, b) => a.items - b.items,
+  fob: (a, b) => a.fob_usd - b.fob_usd,
+};
+
+async function listarImportadores({ periodo, q, orden, dir, desde, limite }) {
+  const { filas, totalFob } = await rankingImportadores(periodo);
+  const texto = q ? q.toUpperCase() : null;
+  const elegidas = texto ? filas.filter((f) => f.nombre.toUpperCase().includes(texto)) : filas.slice();
+  const comparar = ORDEN_IMPORTADORES[orden];
+  // Desempate por nombre, para que la carga por partes no repita ni saltee filas
+  elegidas.sort((a, b) => (dir === 'asc' ? 1 : -1) * comparar(a, b) || a.nombre.localeCompare(b.nombre, 'es'));
+  return {
+    total: elegidas.length,
+    total_fob: totalFob,
+    desde,
+    filas: elegidas.slice(desde, desde + limite),
+  };
+}
+
+const ORDEN_DESPACHOS_IMPORTADOR = {
+  fecha: 'c.Periodo {dir}, c.NroAduana {dir}', despacho: 'c.NroAduana {dir}',
+  items: 'items {dir}, c.NroAduana', fob: 'fob_usd {dir}, c.NroAduana',
+};
+
+// Despachos de un importador, con sus ítems y FOB en US$, por partes
+async function despachosDeImportador(id, { periodo, orden, dir, desde, limite }) {
+  const [[importador]] = await pool.query('SELECT IdImportador AS id, Nombre AS nombre FROM importadores WHERE IdImportador = ?', [id]);
+  if (!importador) return null;
+  const params = [id];
+  const filtro = filtroPeriodo('c', periodo, params);
+  const [[totales]] = await pool.query(`
+    SELECT COUNT(DISTINCT c.IdOperacion) AS despachos, COUNT(i.Item) AS items, SUM(i.FobTotalDolares) AS fob_usd
+    FROM caratula c
+    LEFT JOIN item i ON i.IdOperacion = c.IdOperacion AND i.Periodo = c.Periodo
+    WHERE c.IdImportador = ?${filtro}`, params);
+  const ordenSql = ORDEN_DESPACHOS_IMPORTADOR[orden].replace(/\{dir\}/g, dir === 'asc' ? 'ASC' : 'DESC');
+  const [filas] = await pool.query(`
+    SELECT c.NroAduana AS nro_despacho, c.Periodo AS periodo, c.Destinacion AS destinacion,
+           c.AduanaOficializacion AS aduana, a.Descrip AS aduana_desc,
+           c.PaisProcedencia AS pais_procedencia, pp.Descrip AS pais_procedencia_desc,
+           COUNT(i.Item) AS items, SUM(i.FobTotalDolares) AS fob_usd
+    FROM caratula c
+    LEFT JOIN item    i  ON i.IdOperacion = c.IdOperacion AND i.Periodo = c.Periodo
+    LEFT JOIN aduanas a  ON a.Codigo  = c.AduanaOficializacion
+    LEFT JOIN paises  pp ON pp.Codigo = c.PaisProcedencia
+    WHERE c.IdImportador = ?${filtro}
+    GROUP BY c.IdOperacion, c.Periodo, c.NroAduana, c.Destinacion, c.AduanaOficializacion, a.Descrip,
+             c.PaisProcedencia, pp.Descrip
+    ORDER BY ${ordenSql}
+    LIMIT ? OFFSET ?`, [...params, limite, desde]);
+  return { importador: { ...importador, ...totales }, total: totales.despachos, desde, filas };
+}
+
 module.exports = {
+  listarImportadores,
+  despachosDeImportador,
+  ORDEN_IMPORTADORES,
+  ORDEN_DESPACHOS_IMPORTADOR,
   matriz,
   listarPeriodos,
   resumenSubpartidas,

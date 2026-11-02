@@ -21,7 +21,7 @@ que registraron en la auditoría. Sin `DB_USER` o `JWT_SECRET` en el
 `.env`, se saltean en lugar de fallar.
 
 Evidencia de la última ejecución: [`salida-npm-test.txt`](salida-npm-test.txt)
-y [`salida-npm-test.png`](salida-npm-test.png) — 39 pruebas (20 unitarias y 19 de integración), 39 correctas.
+y [`salida-npm-test.png`](salida-npm-test.png) — 44 pruebas (20 unitarias y 24 de integración), 44 correctas.
 
 ## Pruebas unitarias (`api/test/unit/`)
 
@@ -84,6 +84,16 @@ Hace pedidos reales a la API y verifica en la tabla `auditoria` qué quedó regi
 | Usar el token de una sesión abierta antes del cambio | 401 "La clave cambió…"; el token nuevo sigue funcionando y la respuesta no muestra la huella de la clave | ✔ |
 | Un administrador le cambia la clave | La sesión abierta del usuario deja de valer; ingresa con la clave nueva | ✔ |
 
+### 5. Grilla de importadores (`importadores.test.js`)
+
+| Paso | Esperado | Obtenido |
+|---|---|---|
+| Ranking completo | Misma cantidad de importadores y mismo FOB total que una suma hecha en SQL; las participaciones suman 100 % | ✔ |
+| Orden | Por defecto, FOB de mayor a menor; con `orden=nombre&dir=asc`, alfabético; un orden inexistente da 400 | ✔ |
+| Carga por partes | Pedido en unas 20 partes, trae exactamente las mismas filas que de una vez, sin repetir ni saltear | ✔ |
+| Buscar con texto | Sólo importadores cuyo nombre lo contiene | ✔ |
+| Despachos de un importador | Cantidad y FOB iguales a la base; ordenado por FOB, el primero es el mayor; importador inexistente da 404 y un id inválido 400 | ✔ |
+
 ### Control de que las pruebas detectan errores
 
 Se modificó a propósito la API para que permita borrar usuarios que ya
@@ -130,3 +140,16 @@ Como usuario de consulta (`profesor`):
 | Nueva de 5 caracteres y repetición distinta | Los dos campos en rojo con su mensaje; no se envía | [`c-02-validacion.png`](c-02-validacion.png) |
 | Clave actual equivocada | "La clave actual no es correcta." (lo responde la API) | [`c-03-actual-mal.png`](c-03-actual-mal.png) |
 | Datos correctos | Aviso "Tu clave se cambió"; la sesión sigue y las consultas funcionan sin volver a ingresar | [`c-04-cambiada.png`](c-04-cambiada.png) |
+
+## Prueba desde la interfaz (grilla de importadores)
+
+Sobre una base de prueba con 644 importadores inventados:
+
+| Paso | Esperado | Captura |
+|---|---|---|
+| Abrir la pestaña Importadores | Grilla de todos los importadores del período, de mayor a menor FOB, con participación; "644 importadores · mostrando 100" | [`i-01-grilla.png`](i-01-grilla.png) |
+| Bajar en la grilla | Trae las filas siguientes de a 100 sin botones de página; los títulos quedan fijos | [`i-02-scroll.png`](i-02-scroll.png) |
+| Clic en "Importador" y Exportar (CSV) | Orden alfabético; el CSV trae los 644, no sólo los cargados | — |
+| Escribir 3 letras | Lista de sugerencias | [`i-03-sugerencias.png`](i-03-sugerencias.png) |
+| Elegir un importador | Sus despachos con período, destinación, aduana, procedencia, ítems y FOB; "Todos los importadores" vuelve a la grilla | [`i-04-importador.png`](i-04-importador.png) |
+| Clic en un despacho | Abre su detalle en la pestaña Despacho | [`i-05-despacho.png`](i-05-despacho.png) |

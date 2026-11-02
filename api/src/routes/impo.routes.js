@@ -12,6 +12,8 @@ router.get('/subpartidas', ctrl.resumenSubpartidas);
 router.get('/ncm/:ncm/precios', ctrl.preciosPorNcm);
 router.get('/ncm/:ncm/valores-bajos', ctrl.valoresBajos);
 router.get('/importadores', ctrl.buscarImportadores);
+router.get('/importadores/ranking', ctrl.listarImportadores);        // grilla de todos, por partes
+router.get('/importadores/:id/despachos', ctrl.despachosDeImportador);
 router.get('/triangulaciones', ctrl.triangulaciones);
 
 // Autocompletado: respuestas cortas para mientras el usuario escribe
