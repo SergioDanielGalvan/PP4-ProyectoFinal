@@ -21,7 +21,7 @@ que registraron en la auditoría. Sin `DB_USER` o `JWT_SECRET` en el
 `.env`, se saltean en lugar de fallar.
 
 Evidencia de la última ejecución: [`salida-npm-test.txt`](salida-npm-test.txt)
-y [`salida-npm-test.png`](salida-npm-test.png) — 48 pruebas (20 unitarias y 28 de integración), 48 correctas.
+y [`salida-npm-test.png`](salida-npm-test.png) — 53 pruebas (20 unitarias y 33 de integración), 53 correctas.
 
 ## Pruebas unitarias (`api/test/unit/`)
 
@@ -103,6 +103,16 @@ Hace pedidos reales a la API y verifica en la tabla `auditoria` qué quedó regi
 | Carga por partes | Las páginas seguidas dan exactamente la misma lista que un solo pedido | ✔ |
 | Filtros mal escritos | Año de 4 dígitos, aduana de 1, orden inexistente o importador de 2 letras: 400 con su mensaje | ✔ |
 
+### 7. Tablero (`tablero.test.js`)
+
+| Paso | Esperado | Obtenido |
+|---|---|---|
+| Indicadores sin filtros | FOB, despachos, importadores y países iguales a un cálculo en SQL | ✔ |
+| Mosaico de países | Hasta 10 países más "Resto"; las participaciones suman 100 % y los FOB suman el total | ✔ |
+| Meses | Suman el total; con un período elegido, los indicadores son los de ese mes y la evolución mensual sigue completa | ✔ |
+| País y partida juntos | FOB y despachos iguales a SQL con esos filtros; el ranking sólo trae NCM de esa partida; la lista de despachos que abre el clic cuenta lo mismo | ✔ |
+| Códigos mal escritos | NCM de 3 dígitos, país de 2 u origen con letras: 400 | ✔ |
+
 ### Control de que las pruebas detectan errores
 
 Se modificó a propósito la API para que permita borrar usuarios que ya
@@ -174,3 +184,15 @@ Sobre la base de prueba, filtrando año 2026 y aduana Ezeiza:
 | Flecha derecha (o "Siguiente") | Muestra el despacho siguiente de la lista y mueve la marca | [`d-03-siguiente.png`](d-03-siguiente.png) |
 | Escape | Se cierra el panel; la lista sigue filtrada, con las 300 filas cargadas y en la misma posición | — |
 | En el celular | El panel ocupa toda la pantalla; Anterior y Siguiente quedan como flechas | [`d-04-celular.png`](d-04-celular.png) |
+
+## Prueba desde la interfaz (Tablero)
+
+| Paso | Esperado | Captura |
+|---|---|---|
+| Ingresar | Se abre el Tablero: indicadores, mosaico de países, meses, ranking de NCM y aduanas | [`t-01-tablero.png`](t-01-tablero.png) |
+| Clic en China en el mosaico | Todo el tablero se filtra por China; el mosaico sigue mostrando todos los países con China resaltada | [`t-02-china.png`](t-02-china.png) |
+| Clic en la barra de 07/2026 | Cambia el período de toda la página; los indicadores muestran la variación contra 06/2026 | [`t-03-mes.png`](t-03-mes.png) |
+| Clic en la primera NCM del ranking | Pestaña Despacho con la lista filtrada ("Desde el Tablero: NCM … · origen CHINA") | [`t-04-despachos.png`](t-04-despachos.png) |
+| Clic en un despacho | Se abre en el panel lateral | [`t-05-panel.png`](t-05-panel.png) |
+| Clic en una aduana | Lista de despachos de esa aduana con los filtros del tablero | — |
+| En el celular | Las tarjetas y gráficos se apilan; el ranking muestra sólo el código NCM | [`t-06-celular.png`](t-06-celular.png) |

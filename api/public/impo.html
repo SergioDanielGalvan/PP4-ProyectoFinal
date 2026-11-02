@@ -102,7 +102,10 @@
   <div class="container-fluid px-lg-4 py-3">
     <!-- Pestañas de Navegación -->
     <nav class="pestanias nav nav-tabs mb-4" role="tablist">
-      <button class="nav-link" role="tab" aria-selected="true" data-panel="p-despacho">
+      <button class="nav-link" role="tab" aria-selected="true" data-panel="p-tablero">
+        <i class="bi bi-speedometer2 me-1"></i> Tablero
+      </button>
+      <button class="nav-link" role="tab" aria-selected="false" data-panel="p-despacho">
         <i class="bi bi-file-earmark-text me-1"></i> Despacho
       </button>
       <button class="nav-link" role="tab" aria-selected="false" data-panel="p-subpartidas">
@@ -132,7 +135,38 @@
     <!-- Contenido Principal -->
     <main>
       <!-- Panel Despacho -->
-      <section id="p-despacho" class="panel">
+      <!-- Panel Tablero: indicadores y rankings; cada elemento lleva a las operaciones -->
+      <section id="p-tablero" class="panel">
+        <div class="tablero-cabecera rounded-3 px-4 py-3 mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <div>
+            <h2 class="h4 mb-0 fw-bold">Importaciones · Tablero</h2>
+            <div class="small opacity-75" id="tb-subtitulo">FOB declarado en millones de US$</div>
+          </div>
+          <div class="small opacity-75 text-end" id="tb-actualizado"></div>
+        </div>
+        <div class="card card-filtro mb-3">
+          <div class="card-body py-3">
+            <form id="f-tablero" class="row g-2 align-items-end">
+              <div class="col-sm-6 col-md-4">
+                <label for="tb-pais" class="form-label small fw-semibold text-secondary">País de origen</label>
+                <select id="tb-pais" class="form-select"><option value="">Todos</option></select>
+              </div>
+              <div class="col-sm-6 col-md-5">
+                <label for="tb-ncm" class="form-label small fw-semibold text-secondary">NCM, partida o capítulo</label>
+                <input id="tb-ncm" class="form-control font-monospace" placeholder="Todas (84, 8471, 8471.30 o 8471.30.12)" autocomplete="off">
+              </div>
+              <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Aplicar</button>
+                <button type="button" id="b-limpiar-tablero" class="btn btn-outline-secondary">Limpiar</button>
+              </div>
+              <div class="col-12 small text-secondary">El período se elige arriba a la derecha. Cada gráfico se puede tocar: un país filtra el tablero, un mes cambia el período, una NCM o una aduana abre sus despachos.</div>
+            </form>
+          </div>
+        </div>
+        <div id="r-tablero"></div>
+      </section>
+
+      <section id="p-despacho" class="panel" hidden>
         <div class="card card-filtro mb-4">
           <div class="card-body p-4">
             <form id="f-despacho">
@@ -186,6 +220,7 @@
                 </div>
               </div>
             </form>
+            <div id="li-extra"></div>
             <div id="r-lista"></div>
           </div>
         </div>

@@ -90,7 +90,7 @@ const ORDEN_DESPACHOS = {
   carga: 'c.Periodo {dir}, c.IdOperacion {dir}',
 };
 
-async function listarDespachos({ periodo, importador, destinacion, anio, aduana, orden = 'carga', dir = 'desc', pagina, tamanio }) {
+async function listarDespachos({ periodo, importador, destinacion, anio, aduana, ncm, origen, orden = 'carga', dir = 'desc', pagina, tamanio }) {
   const params = [];
   let where = 'WHERE 1 = 1';
   where += filtroPeriodo('c', periodo, params);
@@ -105,6 +105,15 @@ async function listarDespachos({ periodo, importador, destinacion, anio, aduana,
   } else if (aduana) {
     where += ' AND c.AduanaOficializacion = ?';
     params.push(aduana);
+  }
+  // NCM (capítulo a NCM) y país de origen: despachos con al menos un ítem que cumpla
+  if (ncm || origen) {
+    const ids = ncm ? await idsDeCodigo(ncm) : null;
+    if (ncm && !ids.length) return { total: 0, pagina, tamanio, resultados: [] };
+    where += ` AND EXISTS (SELECT 1 FROM item ix WHERE ix.IdOperacion = c.IdOperacion AND ix.Periodo = c.Periodo${
+      ids ? ' AND ix.IdPosicion IN (?)' : ''}${origen ? ' AND ix.PaisOrigen = ?' : ''})`;
+    if (ids) params.push(ids);
+    if (origen) params.push(origen);
   }
   if (importador) {
     where += ' AND imp.Nombre LIKE ?';
@@ -498,6 +507,115 @@ async function sugerirImportadores(texto, limite) {
   return rows;
 }
 
+// ---------- tablero ----------
+// Posiciones del KIT que abarca un código de 2, 4, 6 u 8 dígitos
+async function idsDeCodigo(digitos) {
+  const prefijo = [digitos.slice(0, 4), digitos.slice(4, 6), digitos.slice(6, 8)].filter(Boolean).join('.');
+  const [rows] = await pool.query('SELECT IdPosicion AS id FROM posicion WHERE PosicionSIM LIKE ?',
+    [digitos.length === 8 ? prefijo : `${prefijo}%`]);
+  return rows.map((r) => r.id);
+}
+
+// Mes anterior a AAAAMM
+const mesAnterior = (p) => (p % 100 === 1 ? p - 89 : p - 1);
+
+// Indicadores, países, meses, NCM y aduanas para la pestaña Tablero. Cada
+// combinación de filtros se calcula una vez y se guarda 10 minutos (en TiDB
+// cada consulta suma 1,6 M de ítems). Los meses no usan el filtro de período:
+// muestran la evolución completa con los demás filtros.
+const CACHE_TABLERO_MS = 10 * 60 * 1000;
+const cacheTablero = new Map();
+
+function tablero(filtros) {
+  const clave = JSON.stringify(filtros);
+  const guardado = cacheTablero.get(clave);
+  if (guardado && Date.now() - guardado.hora < CACHE_TABLERO_MS) return guardado.promesa;
+  if (cacheTablero.size > 200) cacheTablero.clear();
+  const promesa = calcularTablero(filtros).catch((err) => { cacheTablero.delete(clave); throw err; });
+  cacheTablero.set(clave, { hora: Date.now(), promesa });
+  return promesa;
+}
+
+async function calcularTablero({ periodo, pais, ncm }) {
+  const ids = ncm ? await idsDeCodigo(ncm) : null;
+  const descripcionNcm = ncm ? await describirCodigo(ncm) : null;
+  // Condición de ítem común (país de origen y NCM) y, aparte, la de período
+  const condicion = (conPeriodo, per = periodo, conPais = true) => {
+    const partes = [];
+    const valores = [];
+    if (conPeriodo && per !== null) { partes.push('i.Periodo = ?'); valores.push(per); }
+    if (pais && conPais) { partes.push('i.PaisOrigen = ?'); valores.push(pais); }
+    if (ids) { partes.push(ids.length ? 'i.IdPosicion IN (?)' : '1 = 0'); if (ids.length) valores.push(ids); }
+    return { where: partes.length ? `WHERE ${partes.join(' AND ')}` : '', valores };
+  };
+  const indicadores = async (per) => {
+    const { where, valores } = condicion(true, per);
+    const [[r]] = await pool.query(`
+      SELECT COALESCE(SUM(i.FobTotalDolares), 0) AS fob, COUNT(*) AS items,
+             COUNT(DISTINCT i.IdOperacion, i.Periodo) AS despachos,
+             COUNT(DISTINCT c.IdImportador) AS importadores,
+             COUNT(DISTINCT i.PaisOrigen) AS paises
+      FROM item i JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
+      ${where}`, valores);
+    return r;
+  };
+
+  const conPer = condicion(true);
+  const sinPer = condicion(false);
+  // El mosaico de países no se filtra por país: muestra todos y la página resalta el elegido
+  const paraPaises = condicion(true, periodo, false);
+  const [actual, anterior, [paises], [meses], [ncms], [aduanas]] = await Promise.all([
+    indicadores(periodo),
+    periodo !== null ? indicadores(mesAnterior(periodo)) : Promise.resolve(null),
+    pool.query(`
+      SELECT i.PaisOrigen AS codigo, p.Descrip AS descrip, SUM(i.FobTotalDolares) AS fob
+      FROM item i LEFT JOIN paises p ON p.Codigo = i.PaisOrigen
+      ${paraPaises.where} GROUP BY i.PaisOrigen, p.Descrip ORDER BY fob DESC`, paraPaises.valores),
+    pool.query(`
+      SELECT i.Periodo AS periodo, SUM(i.FobTotalDolares) AS fob, COUNT(DISTINCT i.IdOperacion) AS despachos
+      FROM item i ${sinPer.where} GROUP BY i.Periodo ORDER BY i.Periodo`, sinPer.valores),
+    pool.query(`
+      SELECT pos.PosicionSIM AS ncm, pos.DescripcionNCM AS descripcion, t.fob, t.items
+      FROM (SELECT i.IdPosicion, SUM(i.FobTotalDolares) AS fob, COUNT(*) AS items
+            FROM item i ${conPer.where} GROUP BY i.IdPosicion ORDER BY fob DESC LIMIT 50) t
+      JOIN posicion pos ON pos.IdPosicion = t.IdPosicion
+      ORDER BY t.fob DESC`, conPer.valores),
+    pool.query(`
+      SELECT c.AduanaOficializacion AS codigo, a.Descrip AS descrip,
+             SUM(i.FobTotalDolares) AS fob, COUNT(DISTINCT i.IdOperacion, i.Periodo) AS despachos
+      FROM item i
+      JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
+      LEFT JOIN aduanas a ON a.Codigo = c.AduanaOficializacion
+      ${conPer.where} GROUP BY c.AduanaOficializacion, a.Descrip ORDER BY fob DESC LIMIT 15`, conPer.valores),
+  ]);
+
+  // Top 10 países y el resto agrupado (sobre el total de todos los países)
+  const total = paises.reduce((t, x) => t + Number(x.fob), 0);
+  const top = paises.slice(0, 10).map((x) => ({ ...x, fob: Number(x.fob), participacion: total ? Number(x.fob) / total : 0 }));
+  const resto = paises.slice(10).reduce((s, x) => s + Number(x.fob), 0);
+  if (resto > 0) top.push({ codigo: null, descrip: `Resto (${paises.length - 10} países)`, fob: resto, participacion: total ? resto / total : 0 });
+
+  const anteriorCargado = anterior && Number(anterior.items) > 0 ? anterior : null;
+  return {
+    filtros: { periodo, pais, ncm, ncm_descripcion: descripcionNcm },
+    indicadores: { ...actual, periodo_anterior: anteriorCargado ? mesAnterior(periodo) : null, anterior: anteriorCargado },
+    paises: top,
+    meses,
+    ncm: ncms,
+    aduanas,
+  };
+}
+
+// Descripción de un código para el encabezado del tablero
+async function describirCodigo(digitos) {
+  if (digitos.length === 2) {
+    const [[cap]] = await pool.query('SELECT Descrip AS descrip FROM capitulo WHERE Codigo = ?', [digitos]);
+    return cap ? `Capítulo ${digitos}: ${cap.descrip}` : `Capítulo ${digitos}`;
+  }
+  const pos = await posicionesDe(digitos);
+  return pos ? `${pos.codigo} · ${pos.descripcion}` : digitos;
+}
+
 // ---------- grilla de importadores ----------
 // Ranking de todos los importadores del período (despachos, ítems y FOB en
 // US$). Sumar 1,6 M de ítems tarda unos segundos en TiDB: se calcula una vez
@@ -588,6 +706,7 @@ async function despachosDeImportador(id, { periodo, orden, dir, desde, limite })
 }
 
 module.exports = {
+  tablero,
   ORDEN_DESPACHOS,
   listarImportadores,
   despachosDeImportador,

@@ -1,7 +1,7 @@
 const model = require('../models/impo.model');
 const { HttpError } = require('../middlewares/errors');
 const { validarNroAduana } = require('../utils/nroAduana');
-const { ncmNormalizada, rangoNcm } = require('../utils/ncm');
+const { ncmNormalizada, rangoNcm, codigoNcm } = require('../utils/ncm');
 
 // ---------- validaciones de parámetros ----------
 function periodoOpcional(valor) {
@@ -95,6 +95,22 @@ const obtenerDespacho = handler(async (req, res) => {
   res.json(despacho);
 });
 
+// País del KIT: 3 dígitos
+function paisOpcional(v, nombre) {
+  if (v === undefined || v === '') return null;
+  if (!/^\d{3}$/.test(v)) throw new HttpError(400, `${nombre} es un código de país de 3 dígitos, por ejemplo 310.`);
+  return v;
+}
+
+// GET /tablero?periodo&pais&ncm
+const tablero = handler(async (req, res) => {
+  res.json(await model.tablero({
+    periodo: periodoOpcional(req.query.periodo),
+    pais: paisOpcional(req.query.pais, 'pais'),
+    ncm: req.query.ncm ? codigoNcm(req.query.ncm) : null,
+  }));
+});
+
 const listarDespachos = handler(async (req, res) => {
   const q = req.query;
   const anio = (q.anio || '').trim();
@@ -111,6 +127,8 @@ const listarDespachos = handler(async (req, res) => {
     destinacion: destinacionOpcional(q.destinacion),
     anio: anio || null,
     aduana: aduana || null,
+    ncm: q.ncm ? codigoNcm(q.ncm) : null,
+    origen: paisOpcional(q.origen, 'origen'),
     orden,
     dir: q.dir === 'asc' ? 'asc' : 'desc',
     pagina: entero(q.pagina, 1, 1, 100000),
@@ -241,6 +259,7 @@ const sugerirImportadores = handler(async (req, res) => {
 });
 
 module.exports = {
+  tablero,
   listarImportadores,
   despachosDeImportador,
   matriz,

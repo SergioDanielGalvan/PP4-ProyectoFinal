@@ -352,6 +352,36 @@ tr.fila-clic:hover td { background-color: #eef4ff; }
   .grilla-scroll { max-height: none; overflow: visible; }
 }
 
+/* ---------- tablero ---------- */
+.tablero-cabecera { background: #1e2a4a; color: #fff; }
+.kpi {
+  background: var(--hoja, #fff); border: 1px solid #e2e8f0; border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06); padding: 0.9rem 1.1rem; height: 100%;
+  display: flex; align-items: center; gap: 0.9rem;
+}
+.kpi .icono { font-size: 2rem; color: #1e2a4a; }
+.kpi .valor { font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: #0f172a; }
+.kpi .nombre { font-size: 0.85rem; color: #475569; }
+.kpi .variacion { font-size: 0.78rem; font-weight: 600; }
+.tb-tarjeta {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06); padding: 0.9rem 1rem; height: 100%;
+}
+.tb-tarjeta h3 { font-size: 0.95rem; font-weight: 700; text-align: center; margin-bottom: 0.6rem; color: #0f172a; }
+.mosaico { position: relative; height: 340px; }
+.mosaico .celda {
+  position: absolute; box-sizing: border-box; border: 2px solid #fff; padding: 0.35rem 0.5rem;
+  color: #fff; font-size: 0.85rem; overflow: hidden; cursor: pointer;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.mosaico .celda:hover { filter: brightness(1.12); }
+.mosaico .celda.apagada { opacity: 0.35; }
+#f-tablero .ac { display: block; width: 100%; }
+.mosaico .celda.oscuro-texto { color: #0f172a; }
+.mosaico .celda .pct { font-size: 0.8rem; opacity: 0.9; }
+.ranking-scroll { max-height: 420px; overflow-y: auto; }
+.tb-nota { font-size: 0.78rem; color: #64748b; }
+
 /* ---------- panel lateral del despacho ---------- */
 .panel-despacho {
   --bs-offcanvas-width: min(1100px, 72vw);

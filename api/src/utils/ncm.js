@@ -27,4 +27,14 @@ function rangoNcm(desde, hasta) {
   return r;
 }
 
-module.exports = { ncmNormalizada, rangoNcm };
+// Para filtrar el tablero y la lista de despachos: capítulo (2 dígitos),
+// partida (4), subpartida (6) o NCM (8), con o sin puntos
+function codigoNcm(valor) {
+  const digitos = String(valor).replace(/\./g, '').trim();
+  if (!/^(\d{2}|\d{4}|\d{6}|\d{8})$/.test(digitos)) {
+    throw new HttpError(400, 'Indicá un capítulo (84), una partida (8471), una subpartida (8471.30) o una NCM (8471.30.12).');
+  }
+  return digitos;
+}
+
+module.exports = { ncmNormalizada, rangoNcm, codigoNcm };

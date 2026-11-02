@@ -145,6 +145,8 @@ document.querySelectorAll('[role="tab"]').forEach((tab) => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('[role="tab"]').forEach((t) => t.setAttribute('aria-selected', t === tab));
     document.querySelectorAll('.panel').forEach((p) => { p.hidden = p.id !== tab.dataset.panel; });
+    if (tab.dataset.panel === 'p-tablero' && tbEstado.periodo !== periodo()) cargarTablero();
+    if (tab.dataset.panel === 'p-despacho' && !listaEstado.cargada) cargarLista();
     if (tab.dataset.panel === 'p-triangulaciones') cargarTriangulaciones();
     if (tab.dataset.panel === 'p-importadores' && (!impEstado.cargada || impEstado.periodo !== periodo())) cargarImportadores();
     if (tab.dataset.panel === 'p-matriz' && !matrizEstado.cargada) cargarMatriz();
@@ -167,9 +169,10 @@ async function cargarPeriodos() {
 }
 
 $('#periodo').addEventListener('change', () => {
-  cargarLista();
+  if (listaEstado.cargada) cargarLista();
   const activo = document.querySelector('[aria-selected="true"]').dataset.panel;
   if (activo === 'p-triangulaciones') cargarTriangulaciones();
+  if (activo === 'p-tablero') cargarTablero();
   if (activo === 'p-importadores') cargarImportadores();
 });
 
@@ -321,7 +324,7 @@ const LISTA_COLUMNAS = [
   { orden: 'periodo', titulo: 'Período' }, { orden: 'importador', titulo: 'Importador' },
   { titulo: 'Ítems', n: true }, { titulo: 'FOB total factura', n: true },
 ];
-const listaEstado = { orden: 'despacho', dir: 'desc', filtros: {}, filas: [], total: 0, pagina: 0, pedido: 0, cargando: false, observador: null, filtrosListos: false };
+const listaEstado = { extra: null, cargada: false, orden: 'despacho', dir: 'desc', filtros: {}, filas: [], total: 0, pagina: 0, pedido: 0, cargando: false, observador: null, filtrosListos: false };
 
 function filaLista(d) {
   return `<tr class="fila-clic" data-nro="${esc(d.nro_despacho)}" title="Ver el detalle">
@@ -355,13 +358,31 @@ function leerFiltrosLista() {
   };
 }
 
+// listaEstado.extra: NCM y país de origen que llegan desde el Tablero (no tienen campo propio)
 const pedirLista = (pagina) => api('/despachos', {
-  periodo: periodo(), ...listaEstado.filtros, orden: listaEstado.orden, dir: listaEstado.dir, pagina, tamanio: PARTE_LISTA,
+  periodo: periodo(), ...listaEstado.filtros, ncm: listaEstado.extra?.ncm, origen: listaEstado.extra?.origen,
+  orden: listaEstado.orden, dir: listaEstado.dir, pagina, tamanio: PARTE_LISTA,
+});
+
+function mostrarExtraLista() {
+  const x = listaEstado.extra;
+  $('#li-extra').innerHTML = x
+    ? `<div class="alert alert-primary py-2 px-3 small d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-funnel-fill"></i><span>Desde el Tablero: ${esc(x.etiqueta)}</span>
+        <button type="button" class="btn-close ms-auto" id="b-quitar-extra" aria-label="Quitar este filtro" title="Quitar este filtro"></button></div>`
+    : '';
+}
+$('#li-extra').addEventListener('click', (e) => {
+  if (e.target.id !== 'b-quitar-extra') return;
+  listaEstado.extra = null;
+  cargarLista();
 });
 const PARTE_LISTA = 100;
 
 async function cargarLista() {
   prepararFiltrosLista();
+  listaEstado.cargada = true;
+  mostrarExtraLista();
   const destino = $('#r-lista');
   const pedido = ++listaEstado.pedido;
   listaEstado.filtros = leerFiltrosLista();
@@ -375,7 +396,7 @@ async function cargarLista() {
     listaEstado.pagina = 1;
     listaEstado.filas = r.resultados;
     if (!r.total) {
-      const hayFiltros = Object.values(listaEstado.filtros).some(Boolean);
+      const hayFiltros = Object.values(listaEstado.filtros).some(Boolean) || listaEstado.extra;
       return mensaje(destino, hayFiltros ? 'No hay despachos con esos filtros en el período elegido.' : 'No hay despachos en este período. Cargá un mes con npm run mes en la carpeta carga.');
     }
     const columnas = encabezadosOrdenables(LISTA_COLUMNAS, listaEstado.orden, listaEstado.dir);
@@ -482,7 +503,7 @@ async function exportarLista() {
       todas.push(...r.resultados);
     }
     const f = listaEstado.filtros;
-    const criterio = [f.anio && `Año 20${f.anio}`, f.aduana && `Aduana ${f.aduana}`, f.destinacion && `Destinación ${f.destinacion}`, f.importador && `Importador con "${f.importador}"`].filter(Boolean).join(' · ') || 'Sin filtros';
+    const criterio = [f.anio && `Año 20${f.anio}`, f.aduana && `Aduana ${f.aduana}`, f.destinacion && `Destinación ${f.destinacion}`, f.importador && `Importador con "${f.importador}"`, listaEstado.extra && listaEstado.extra.etiqueta].filter(Boolean).join(' · ') || 'Sin filtros';
     const lineas = [['SISTEMA COMEX - DESPACHOS'], ['Periodo', periodo() ? mes(periodo()) : 'Todos'], ['Filtros', criterio],
       ...(listaEstado.total > todas.length ? [['Aviso', `Se exportan los primeros ${todas.length} de ${listaEstado.total}`]] : []), [],
       ['Despacho', 'Destinacion', 'Aduana', 'Periodo', 'Importador', 'Items', 'Divisa', 'FOB total factura'],
@@ -525,6 +546,7 @@ $('#f-lista').addEventListener('submit', (e) => {
 });
 $('#b-limpiar-lista').addEventListener('click', () => {
   $('#f-lista').reset();
+  listaEstado.extra = null;
   listaEstado.orden = 'despacho';
   listaEstado.dir = 'desc';
   cargarLista();
@@ -1565,7 +1587,241 @@ document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('cli
   if (matrizEstado.datos) dibujarMatriz();
 }));
 
-cargarPeriodos().then(cargarLista);
+cargarPeriodos().then(cargarTablero);   // el Tablero es la pestaña de inicio; la lista de despachos se carga al abrir su pestaña
+
+// ---------- tablero ----------
+// Indicadores del período, participación por país (mosaico), evolución
+// mensual, ranking de NCM y de aduanas. Todo se puede tocar: un país filtra el
+// tablero, un mes cambia el período, una NCM o una aduana abre sus despachos.
+const tbEstado = { periodo: undefined, pais: '', ncm: '', datos: null, graficos: [], pedido: 0, filtrosListos: false };
+const PALETA_MOSAICO = ['#1e3a5f', '#c9b26b', '#4f9d69', '#2ab0e0', '#f2df8f', '#3b6ea5', '#3f7a46', '#8b1e24', '#9aa5b1', '#a9d6f5', '#cbd5e1'];
+const TEXTO_OSCURO = new Set(['#c9b26b', '#f2df8f', '#a9d6f5', '#cbd5e1', '#9aa5b1']);
+const enMillones = (v) => fmtNum.format(Math.round(v / 1e5) / 10);
+
+function prepararFiltrosTablero() {
+  if (tbEstado.filtrosListos) return;
+  tbEstado.filtrosListos = true;
+  obtenerCatalogos().then((c) => {
+    $('#tb-pais').insertAdjacentHTML('beforeend', opcionesDe(c.paises, (p) => `${p.descrip} (${p.codigo})`));
+    if (tbEstado.pais) $('#tb-pais').value = tbEstado.pais;
+  }).catch(() => {});
+}
+
+async function cargarTablero() {
+  prepararFiltrosTablero();
+  const destino = $('#r-tablero');
+  const pedido = ++tbEstado.pedido;
+  tbEstado.periodo = periodo();
+  destino.innerHTML = '<p class="nota">Armando el tablero (la primera vez de cada combinación tarda unos segundos)…</p>';
+  try {
+    const d = await api('/tablero', { periodo: periodo(), pais: tbEstado.pais, ncm: tbEstado.ncm });
+    if (pedido !== tbEstado.pedido) return;
+    tbEstado.datos = d;
+    dibujarTablero(d);
+  } catch (err) {
+    if (pedido === tbEstado.pedido) mensaje(destino, err.message, true);
+  }
+}
+
+function variacion(actual, anterior, perAnterior) {
+  if (!anterior || !Number(anterior)) return '';
+  const v = (Number(actual) - Number(anterior)) / Number(anterior);
+  const sube = v >= 0;
+  return `<div class="variacion ${sube ? 'text-success' : 'text-danger'}">${sube ? '▲' : '▼'} ${fmtNum.format(Math.abs(Math.round(v * 1000) / 10))} % vs ${mes(perAnterior)}</div>`;
+}
+
+function tarjetaKpi(icono, valor, nombre, extra = '') {
+  return `<div class="col-6 col-lg-3"><div class="kpi"><i class="bi ${icono} icono"></i>
+    <div><div class="valor">${valor}</div><div class="nombre">${nombre}</div>${extra}</div></div></div>`;
+}
+
+function dibujarTablero(d) {
+  tbEstado.graficos.forEach((g) => g.destroy());
+  tbEstado.graficos = [];
+  const k = d.indicadores;
+  const a = k.anterior;
+  const per = periodo() ? mes(periodo()) : 'todos los meses cargados';
+  const filtros = [d.filtros.pais && (d.paises.find((p) => p.codigo === d.filtros.pais)?.descrip || `país ${d.filtros.pais}`),
+    d.filtros.ncm_descripcion].filter(Boolean);
+  $('#tb-subtitulo').textContent = `FOB declarado en millones de US$ · ${per}${filtros.length ? ` · ${filtros.join(' · ')}` : ''}`;
+  if (d.meses.length) $('#tb-actualizado').textContent = `Meses cargados: ${mes(d.meses[0].periodo)} a ${mes(d.meses[d.meses.length - 1].periodo)}`;
+
+  if (!Number(k.items)) {
+    return mensaje($('#r-tablero'), 'No hay importaciones con esos filtros en el período elegido.');
+  }
+  $('#r-tablero').innerHTML = `
+    <div class="row g-3 mb-3">
+      ${tarjetaKpi('bi-cash-stack', enMillones(k.fob), 'Impo (mill. US$ FOB)', variacion(k.fob, a?.fob, k.periodo_anterior))}
+      ${tarjetaKpi('bi-file-earmark-text', num(k.despachos), 'Despachos', variacion(k.despachos, a?.despachos, k.periodo_anterior))}
+      ${tarjetaKpi('bi-building', num(k.importadores), 'Importadores', variacion(k.importadores, a?.importadores, k.periodo_anterior))}
+      ${tarjetaKpi('bi-globe-americas', num(k.paises), 'Países de origen', variacion(k.paises, a?.paises, k.periodo_anterior))}
+    </div>
+    <div class="row g-3 mb-3">
+      <div class="col-lg-6"><div class="tb-tarjeta"><h3>Participación por país de origen · top 10 (% US$)${tbEstado.pais ? ' · clic de nuevo para ver todos' : ''}</h3><div class="mosaico" id="tb-mosaico"></div></div></div>
+      <div class="col-lg-6"><div class="tb-tarjeta"><h3>Importaciones por mes (mill. US$ FOB)</h3><div style="height:340px"><canvas id="tb-meses"></canvas></div></div></div>
+    </div>
+    <div class="row g-3 mb-2">
+      <div class="col-lg-7"><div class="tb-tarjeta"><h3>Ranking por NCM (mill. US$) · clic para ver los despachos</h3>
+        <div class="ranking-scroll"><div style="height:${Math.max(200, d.ncm.length * 26)}px"><canvas id="tb-ncm-grafico"></canvas></div></div></div></div>
+      <div class="col-lg-5"><div class="tb-tarjeta"><h3>Aduanas (mill. US$) · clic para ver los despachos</h3>
+        <div style="height:${Math.max(200, d.aduanas.length * 28)}px"><canvas id="tb-aduanas"></canvas></div></div></div>
+    </div>
+    <p class="tb-nota mt-2 mb-0">Fuente: archivos mensuales de importaciones de ARCA. Valores <strong>FOB</strong> por ítem (VUCE e INDEC publican CIF: sus totales son más altos).
+      A diferencia de los tableros oficiales, estos datos llegan hasta cada despacho e importador.</p>`;
+
+  dibujarMosaico($('#tb-mosaico'), d.paises);
+
+  const color = '#1e3a5f';
+  const ejeMillones = { grid: { color: '#e3e8e6' }, border: { display: false }, ticks: { color: '#5b6b74', callback: (v) => enMillones(v) } };
+  const cursor = (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; };
+
+  // Meses: el elegido, resaltado; clic = elegir ese período
+  tbEstado.graficos.push(new Chart($('#tb-meses'), {
+    type: 'bar',
+    data: {
+      labels: d.meses.map((m) => mes(m.periodo)),
+      datasets: [{ data: d.meses.map((m) => m.fob), backgroundColor: d.meses.map((m) => (!periodo() || String(m.periodo) === periodo() ? color : '#94a3b8')), borderRadius: 3 }],
+    },
+    options: {
+      maintainAspectRatio: false, animation: false,
+      scales: { x: { grid: { display: false }, ticks: { color: '#5b6b74' } }, y: ejeMillones },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${millones(c.raw)} · ${num(d.meses[c.dataIndex].despachos)} despachos` } } },
+      onHover: cursor,
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const p = String(d.meses[els[0].index].periodo);
+        $('#periodo').value = $('#periodo').value === p ? '' : p;   // otro clic en el mismo mes vuelve a "Todos"
+        $('#periodo').dispatchEvent(new Event('change'));
+      },
+    },
+  }));
+
+  // Ranking de NCM: clic = despachos de esa NCM (y del país, si hay uno elegido)
+  tbEstado.graficos.push(new Chart($('#tb-ncm-grafico'), {
+    type: 'bar',
+    // En pantallas angostas, sólo el código (la descripción completa está en el globo)
+    data: { labels: d.ncm.map((n) => (window.innerWidth < 768 ? n.ncm : `${n.ncm} - ${corto(n.descripcion, 38)}`)), datasets: [{ data: d.ncm.map((n) => n.fob), backgroundColor: color, borderRadius: 2 }] },
+    options: {
+      indexAxis: 'y', maintainAspectRatio: false, animation: false,
+      scales: { x: { ...ejeMillones, position: 'top' }, y: { grid: { display: false }, ticks: { color: '#1d2b36', font: { size: 11 }, autoSkip: false } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: (c) => `${d.ncm[c[0].dataIndex].ncm} - ${corto(d.ncm[c[0].dataIndex].descripcion, 60)}`, label: (c) => ` ${millones(c.raw)} · ${num(d.ncm[c.dataIndex].items)} ítems` } } },
+      onHover: cursor,
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const n = d.ncm[els[0].index];
+        irADespachos({ ncm: n.ncm.replace(/\./g, ''), etiqueta: `NCM ${n.ncm}` });
+      },
+    },
+  }));
+
+  // Aduanas: clic = despachos de esa aduana con los filtros del tablero
+  tbEstado.graficos.push(new Chart($('#tb-aduanas'), {
+    type: 'bar',
+    data: { labels: d.aduanas.map((x) => `${x.descrip || x.codigo} (${x.codigo})`), datasets: [{ data: d.aduanas.map((x) => x.fob), backgroundColor: '#3b6ea5', borderRadius: 2 }] },
+    options: {
+      indexAxis: 'y', maintainAspectRatio: false, animation: false,
+      scales: { x: { ...ejeMillones, position: 'top' }, y: { grid: { display: false }, ticks: { color: '#1d2b36', font: { size: 11 }, autoSkip: false } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${millones(c.raw)} · ${num(d.aduanas[c.dataIndex].despachos)} despachos` } } },
+      onHover: cursor,
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const x = d.aduanas[els[0].index];
+        irADespachos({ ncm: d.filtros.ncm, aduana: x.codigo, etiqueta: tbEstado.ncm ? `NCM ${tbEstado.ncm}` : '' });
+      },
+    },
+  }));
+}
+
+// Mosaico (treemap) "squarified": rectángulos proporcionales al FOB, lo más
+// cuadrados posible. Sin bibliotecas: posiciones en porcentaje del contenedor.
+function dibujarMosaico(contenedor, paises) {
+  const W = contenedor.clientWidth || 600;
+  const H = contenedor.clientHeight || 340;
+  const total = paises.reduce((s, p) => s + p.fob, 0);
+  const items = paises.map((p, i) => ({ ...p, area: (p.fob / total) * W * H, color: p.codigo ? PALETA_MOSAICO[i % 10] : PALETA_MOSAICO[10] }));
+  const celdas = [];
+  let x = 0; let y = 0; let w = W; let h = H;
+  const peor = (fila, lado) => {
+    const s = fila.reduce((t, r) => t + r.area, 0);
+    return Math.max(...fila.map((r) => Math.max((lado * lado * r.area) / (s * s), (s * s) / (lado * lado * r.area))));
+  };
+  let restantes = items.slice();
+  while (restantes.length) {
+    const lado = Math.min(w, h);
+    const fila = [restantes[0]];
+    let i = 1;
+    while (i < restantes.length && peor([...fila, restantes[i]], lado) <= peor(fila, lado)) fila.push(restantes[i++]);
+    restantes = restantes.slice(i);
+    const s = fila.reduce((t, r) => t + r.area, 0);
+    if (w >= h) {             // columna a la izquierda
+      const ancho = s / h;
+      let yy = y;
+      fila.forEach((r) => { const alto = r.area / ancho; celdas.push({ ...r, x, y: yy, w: ancho, h: alto }); yy += alto; });
+      x += ancho; w -= ancho;
+    } else {                  // fila arriba
+      const alto = s / w;
+      let xx = x;
+      fila.forEach((r) => { const ancho = r.area / alto; celdas.push({ ...r, x: xx, y, w: ancho, h: alto }); xx += ancho; });
+      y += alto; h -= alto;
+    }
+  }
+  contenedor.innerHTML = celdas.map((c) => `
+    <div class="celda${TEXTO_OSCURO.has(c.color) ? ' oscuro-texto' : ''}${tbEstado.pais && c.codigo !== tbEstado.pais ? ' apagada' : ''}" data-pais="${esc(c.codigo || '')}"
+      style="left:${(c.x / W) * 100}%;top:${(c.y / H) * 100}%;width:${(c.w / W) * 100}%;height:${(c.h / H) * 100}%;background:${c.color}"
+      title="${esc(c.descrip)}: ${millones(c.fob)} (${pct(c.participacion * 100)})${c.codigo ? (c.codigo === tbEstado.pais ? ' · clic para quitar el filtro' : ' · clic para filtrar el tablero') : ''}">
+      ${c.w > 46 && c.h > 30 ? `<span>${esc(c.descrip)}</span>` : ''}${c.w > 40 && c.h > 46 ? `<span class="pct">${pct(c.participacion * 100)}</span>` : ''}
+    </div>`).join('');
+}
+
+$('#r-tablero').addEventListener('click', (e) => {
+  const celda = e.target.closest('.celda[data-pais]');
+  if (!celda || !celda.dataset.pais) return;
+  tbEstado.pais = tbEstado.pais === celda.dataset.pais ? '' : celda.dataset.pais;   // otro clic quita el filtro
+  $('#tb-pais').value = tbEstado.pais;
+  cargarTablero();
+});
+
+$('#f-tablero').addEventListener('submit', (e) => {
+  e.preventDefault();
+  tbEstado.pais = $('#tb-pais').value;
+  tbEstado.ncm = $('#tb-ncm').value.trim();
+  cargarTablero();
+});
+$('#b-limpiar-tablero').addEventListener('click', () => {
+  $('#f-tablero').reset();
+  tbEstado.pais = '';
+  tbEstado.ncm = '';
+  cargarTablero();
+});
+
+// Lleva a la pestaña Despacho con la lista filtrada por lo que se tocó en el tablero
+function irADespachos({ ncm, aduana, etiqueta }) {
+  const pais = tbEstado.pais;
+  const nombrePais = pais ? (tbEstado.datos.paises.find((p) => p.codigo === pais)?.descrip || pais) : '';
+  const partes = [etiqueta, pais && `origen ${nombrePais}`].filter(Boolean);
+  listaEstado.extra = (ncm || pais) ? { ncm: ncm || undefined, origen: pais || undefined, etiqueta: partes.join(' · ') } : null;
+  $('#f-lista').reset();
+  listaEstado.orden = 'despacho';
+  listaEstado.dir = 'desc';
+  prepararFiltrosLista();
+  const abrir = () => {
+    if (aduana) $('#li-aduana').value = aduana;
+    listaEstado.cargada = true;   // para que la pestaña no la cargue dos veces
+    document.querySelector('[data-panel="p-despacho"]').click();
+    cargarLista();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  // La lista de aduanas se llena con el catálogo: se espera a tenerlo
+  if (aduana) obtenerCatalogos().then(() => setTimeout(abrir, 0)).catch(abrir);
+  else abrir();
+}
+
+// El mosaico se redibuja si cambia el ancho de la ventana
+let tbRedibujo = null;
+window.addEventListener('resize', () => {
+  clearTimeout(tbRedibujo);
+  tbRedibujo = setTimeout(() => { if (tbEstado.datos && $('#tb-mosaico')) dibujarMosaico($('#tb-mosaico'), tbEstado.datos.paises); }, 200);
+});
 
 // ---------- autocompletado ----------
 // Lista de sugerencias debajo de un campo mientras se escribe. Se maneja con
@@ -1671,6 +1927,7 @@ autocompletar($('#ncm'), { minimo: minimoNcm, buscar: buscarNcm, alElegir: () =>
 autocompletar($('#desde'), { minimo: minimoNcm, buscar: buscarNcm });
 autocompletar($('#tr-ncm'), { minimo: minimoNcm, buscar: buscarNcm, alElegir: () => $('#f-tri').requestSubmit() });
 autocompletar($('#hasta'), { minimo: minimoNcm, buscar: buscarNcm });
+autocompletar($('#tb-ncm'), { minimo: minimoNcm, buscar: buscarNcm, alElegir: () => $('#f-tablero').requestSubmit() });
 
 // ---------- usuarios (CRUD, sólo administradores) ----------
 // Alta, lista, modificación (nombre, rol, clave, activo) y baja. La API sólo
