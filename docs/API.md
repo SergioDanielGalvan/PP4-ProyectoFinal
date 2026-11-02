@@ -64,7 +64,7 @@ administración y el SQL libre exigen token de admin **siempre**.
 | `GET /impo/periodos` | | `[{ periodo, caratulas, items }]` |
 | `GET /impo/catalogos` | | `{ regiones, paises, aduanas }` para armar los filtros |
 | `GET /impo/matriz` | `nivel` (`seccion`/`capitulo`), `seccion` (I…XXI), `grupos` (lista: CONSUMO,TEMP,ZF,REDES,AAE) | FOB por sección o capítulo y mes (ver abajo) |
-| `GET /impo/despachos` | `periodo`, `importador`, `destinacion`, `pagina`, `tamanio` | `{ total, pagina, tamanio, resultados }` |
+| `GET /impo/despachos` | `periodo`, `anio` (2 dígitos, como en el número: `26`), `aduana` (3 dígitos), `destinacion` (`IC04`), `importador` (3 letras o más), `orden` (`despacho`, `periodo`, `importador`, `carga`; por defecto `carga`), `dir` (`desc`/`asc`), `pagina`, `tamanio` (hasta 100) | `{ total, pagina, tamanio, resultados: [{ nro_despacho, periodo, destinacion, aduana, aduana_desc, importador, divisa, divisa_abrev, fob_total_divisa, items }] }`. `orden=despacho` ordena por número: dentro de una aduana, los últimos registrados primero |
 | `GET /impo/despachos/:nro` | | carátula con ítems y liquidación |
 | `GET /impo/subpartidas` | `desde`, `hasta`, `periodo`, `limite` | resumen por NCM |
 | `GET /impo/ncm/:ncm/precios` | `periodo` o `desde`/`hasta`, `region`, `paises`, `aduanas` (ver filtros) | valores unitarios por origen y unidad; `nivel` y, fuera de NCM, `posiciones` (cuántas NCM entran en cada fila) |

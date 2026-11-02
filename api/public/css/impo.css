@@ -352,6 +352,27 @@ tr.fila-clic:hover td { background-color: #eef4ff; }
   .grilla-scroll { max-height: none; overflow: visible; }
 }
 
+/* ---------- panel lateral del despacho ---------- */
+.panel-despacho {
+  --bs-offcanvas-width: min(1100px, 72vw);
+}
+@media (max-width: 768px) {
+  .panel-despacho { --bs-offcanvas-width: 100vw; }
+  .panel-despacho .offcanvas-title { font-size: 1rem; }
+}
+.panel-despacho .grilla-scroll { max-height: calc(100vh - 380px); min-height: 12rem; }
+tr.actual td { background-color: #e0ebff !important; }
+@media print {
+  /* Con el panel abierto se imprime sólo el despacho */
+  body.con-despacho > *:not(#oc-despacho) { display: none !important; }
+  body.con-despacho #oc-despacho {
+    position: static !important; transform: none !important; visibility: visible !important;
+    width: 100% !important; border: 0 !important; box-shadow: none !important;
+  }
+  #oc-despacho .offcanvas-header { display: none !important; }
+  #oc-despacho .grilla-scroll { max-height: none !important; overflow: visible !important; }
+}
+
 /* ---------- autocompletado ---------- */
 .ac {
   position: relative;

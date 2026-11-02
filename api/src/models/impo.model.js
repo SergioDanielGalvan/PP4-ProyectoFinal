@@ -79,10 +79,33 @@ async function obtenerDespacho(nro) {
   return { periodo, ...caratula, items: [...porItem.values()] };
 }
 
-async function listarDespachos({ periodo, importador, destinacion, pagina, tamanio }) {
+// Orden de la lista de despachos. "despacho" ordena por el número (año,
+// aduana, subrégimen y correlativo): dentro de una aduana, los más altos son
+// los últimos registrados. "carga" es el orden en que vienen en el archivo de
+// ARCA, que está ordenado por importador.
+const ORDEN_DESPACHOS = {
+  despacho: 'c.NroAduana {dir}, c.Periodo {dir}',
+  periodo: 'c.Periodo {dir}, c.NroAduana {dir}',
+  importador: 'imp.Nombre {dir}, c.NroAduana DESC',
+  carga: 'c.Periodo {dir}, c.IdOperacion {dir}',
+};
+
+async function listarDespachos({ periodo, importador, destinacion, anio, aduana, orden = 'carga', dir = 'desc', pagina, tamanio }) {
   const params = [];
   let where = 'WHERE 1 = 1';
   where += filtroPeriodo('c', periodo, params);
+  // Año y aduana son el comienzo del número: juntos (o el año solo) usan el
+  // índice de NroAduana; la aduana sola se compara con su columna
+  if (anio && aduana) {
+    where += ' AND c.NroAduana LIKE ?';
+    params.push(`${anio}${aduana}%`);
+  } else if (anio) {
+    where += ' AND c.NroAduana LIKE ?';
+    params.push(`${anio}%`);
+  } else if (aduana) {
+    where += ' AND c.AduanaOficializacion = ?';
+    params.push(aduana);
+  }
   if (importador) {
     where += ' AND imp.Nombre LIKE ?';
     params.push(`%${importador}%`);
@@ -102,7 +125,8 @@ async function listarDespachos({ periodo, importador, destinacion, pagina, taman
 
   const [rows] = await pool.query(`
     SELECT c.NroAduana AS nro_despacho, c.Periodo AS periodo,
-           c.Destinacion AS destinacion, c.AduanaOficializacion AS aduana, imp.Nombre AS importador,
+           c.Destinacion AS destinacion, c.AduanaOficializacion AS aduana, ad.Descrip AS aduana_desc,
+           imp.Nombre AS importador,
            c.PaisProcedencia AS pais_procedencia, c.DivisaFOB AS divisa,
            dv.Abreviatura AS divisa_abrev, c.FobTotalDivisas AS fob_total_divisa,
            (SELECT COUNT(*) FROM item i
@@ -110,8 +134,9 @@ async function listarDespachos({ periodo, importador, destinacion, pagina, taman
     FROM caratula c
     JOIN      importadores imp ON imp.IdImportador = c.IdImportador
     LEFT JOIN divisas      dv  ON dv.Codigo = c.DivisaFOB
+    LEFT JOIN aduanas      ad  ON ad.Codigo = c.AduanaOficializacion
     ${where}
-    ORDER BY c.Periodo DESC, c.IdOperacion DESC   -- últimos cargados; sigue la clave, sin ordenar todo
+    ORDER BY ${ORDEN_DESPACHOS[orden].replace(/\{dir\}/g, dir === 'asc' ? 'ASC' : 'DESC')}
     LIMIT ? OFFSET ?`, [...params, tamanio, (pagina - 1) * tamanio]);
 
   return { total, pagina, tamanio, resultados: rows };
@@ -563,6 +588,7 @@ async function despachosDeImportador(id, { periodo, orden, dir, desde, limite })
 }
 
 module.exports = {
+  ORDEN_DESPACHOS,
   listarImportadores,
   despachosDeImportador,
   ORDEN_IMPORTADORES,

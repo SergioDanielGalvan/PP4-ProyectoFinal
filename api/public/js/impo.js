@@ -182,10 +182,22 @@ function nroEnCasillas(nro) {
   return `<div class="nro" aria-label="Despacho ${nro}">${partes.map(([v, t]) => `<span title="${t}">${esc(v)}</span>`).join('')}</div>`;
 }
 
+// El detalle se muestra en un panel lateral (offcanvas de Bootstrap): la lista
+// de despachos queda atrás con sus filtros, su orden y su posición.
+const panelDespacho = () => bootstrap.Offcanvas.getOrCreateInstance($('#oc-despacho'));
+let pedidoDespacho = 0;
+
 async function mostrarDespacho(nro) {
   const destino = $('#r-despacho');
+  const pedido = ++pedidoDespacho;    // al pasar rápido de uno a otro, gana el último
+  $('#oc-titulo').textContent = nro;
+  actualizarNavegacion(nro);
+  destino.innerHTML = '<p class="nota">Buscando el despacho…</p>';
+  panelDespacho().show();
   try {
     const d = await api(`/despachos/${encodeURIComponent(nro)}`);
+    if (pedido !== pedidoDespacho) return;
+    $('#oc-titulo').textContent = `Despacho ${d.nro_despacho}`;
     // FOB por ítem viene en USD; FOB total, en la divisa de la factura
     const fobItems = d.items.reduce((s, it) => s + (it.fob_usd || 0), 0);
     const enDolares = d.divisa === 'DOL';
@@ -227,7 +239,8 @@ async function mostrarDespacho(nro) {
         { titulo: 'Ítem', n: true }, { titulo: 'NCM' }, { titulo: 'Mercadería' },
         { titulo: 'Origen' }, { titulo: 'Cantidad', n: true }, { titulo: 'Valor unitario', n: true },
         { titulo: 'FOB', n: true },
-      ], filas)}
+      ], filas).replace('<div class="tabla">', '<div class="tabla grilla-scroll">')}
+      <p class="nota small">${d.items.length} ${d.items.length === 1 ? 'ítem' : 'ítems'}</p>
       ${faltante > 1 ? `<p class="mensaje">Los ítems suman ${usd(fobItems)} contra un FOB total de ${usd(d.fob_total_divisa)}: ${usd(faltante)} corresponden a ítems que no vienen en el archivo.</p>`
         : salteados ? '<p class="mensaje">Hay números de ítem salteados: esos ítems no vienen en el archivo.</p>' : ''}`;
         // Evento Imprimir
@@ -277,58 +290,245 @@ async function mostrarDespacho(nro) {
       };
     }
   } catch (err) {
-    mensaje(destino, err.message, true);
+    if (pedido === pedidoDespacho) mensaje(destino, err.message, true);
   }
-
 }
+
+$('#oc-despacho').addEventListener('show.bs.offcanvas', () => document.body.classList.add('con-despacho'));
+$('#oc-despacho').addEventListener('hidden.bs.offcanvas', () => {
+  document.body.classList.remove('con-despacho');
+  document.querySelectorAll('#r-lista tr.actual').forEach((t) => t.classList.remove('actual'));
+});
 
 $('#f-despacho').addEventListener('submit', (e) => {
   e.preventDefault();
   const nro = $('#nro').value.trim().toUpperCase();
-  if (!nro) return mensaje($('#r-despacho'), 'Escribí el número de despacho, por ejemplo 26001IC04151676V (la letra final es opcional).', true);
-  mostrarDespacho(nro);
+  $('#nro-aviso').textContent = nro ? '' : 'Escribí el número de despacho, por ejemplo 26001IC04151676V (la letra final es opcional).';
+  if (nro) mostrarDespacho(nro);
 });
 $('#b-limpiar').addEventListener('click', () => {
   $('#nro').value = '';
-  $('#r-despacho').innerHTML = '';
   $('#nro').focus();
 });
 
+// ---------- lista de despachos ----------
+// Filtros por año, aduana, destinación e importador; orden por número de
+// despacho, período o importador; carga por partes al bajar en la grilla.
+// Por defecto, por número de mayor a menor: dentro de una aduana, los últimos
+// registrados primero (ARCA publica el mes, no la fecha exacta).
+const LISTA_COLUMNAS = [
+  { orden: 'despacho', titulo: 'Despacho' }, { titulo: 'Destinación' }, { titulo: 'Aduana' },
+  { orden: 'periodo', titulo: 'Período' }, { orden: 'importador', titulo: 'Importador' },
+  { titulo: 'Ítems', n: true }, { titulo: 'FOB total factura', n: true },
+];
+const listaEstado = { orden: 'despacho', dir: 'desc', filtros: {}, filas: [], total: 0, pagina: 0, pedido: 0, cargando: false, observador: null, filtrosListos: false };
+
+function filaLista(d) {
+  return `<tr class="fila-clic" data-nro="${esc(d.nro_despacho)}" title="Ver el detalle">
+    <td class="codigo">${esc(d.nro_despacho)}</td>
+    <td class="codigo">${esc(d.destinacion)}</td>
+    <td>${codigo(d.aduana, d.aduana_desc)}</td>
+    <td>${esc(mes(d.periodo))}</td>
+    <td>${esc(d.importador)}</td>
+    <td class="n">${num(d.items)}</td>
+    <td class="n">${esc(d.divisa === 'DOL' ? 'US$' : (d.divisa_abrev || d.divisa))} ${importe(d.fob_total_divisa)}</td>
+  </tr>`;
+}
+
+function prepararFiltrosLista() {
+  if (listaEstado.filtrosListos) return;
+  listaEstado.filtrosListos = true;
+  // Años: los dos dígitos del número de despacho; el actual y los tres anteriores
+  const actual = new Date().getFullYear() % 100;
+  $('#li-anio').insertAdjacentHTML('beforeend', [0, 1, 2, 3].map((k) => `<option value="${actual - k}">20${actual - k}</option>`).join(''));
+  obtenerCatalogos().then((c) => {
+    $('#li-aduana').insertAdjacentHTML('beforeend', opcionesDe(c.aduanas, (a) => `${a.descrip} (${a.codigo})`));
+  }).catch(() => {});
+}
+
+function leerFiltrosLista() {
+  return {
+    anio: $('#li-anio').value,
+    aduana: $('#li-aduana').value,
+    destinacion: $('#li-destinacion').value.trim().toUpperCase(),
+    importador: $('#li-importador').value.trim(),
+  };
+}
+
+const pedirLista = (pagina) => api('/despachos', {
+  periodo: periodo(), ...listaEstado.filtros, orden: listaEstado.orden, dir: listaEstado.dir, pagina, tamanio: PARTE_LISTA,
+});
+const PARTE_LISTA = 100;
+
 async function cargarLista() {
+  prepararFiltrosLista();
   const destino = $('#r-lista');
-  destino.innerHTML = '<p class="nota">Cargando despachos recientes…</p>';
+  const pedido = ++listaEstado.pedido;
+  listaEstado.filtros = leerFiltrosLista();
+  listaEstado.filas = [];
+  if (listaEstado.observador) listaEstado.observador.disconnect();
+  destino.innerHTML = '<p class="nota">Buscando despachos…</p>';
   try {
-    const r = await api('/despachos', { periodo: periodo(), tamanio: 10 });
-    if (r.total === 0) return mensaje(destino, 'No hay despachos en este periodo. Cargá un mes con npm run mes en la carpeta carga.');
-    const filas = r.resultados.map((d) => `
-      <tr>
-        <td><a href="#" class="nro-link codigo" data-nro="${esc(d.nro_despacho)}">${esc(d.nro_despacho)}</a></td>
-        <td class="codigo">${esc(d.destinacion)}</td>
-        <td>${esc(mes(d.periodo))}</td>
-        <td>${esc(d.importador)}</td>
-        <td class="n">${d.items}</td>
-        <td class="n">${esc(d.divisa === 'DOL' ? 'US$' : (d.divisa_abrev || d.divisa))} ${importe(d.fob_total_divisa)}</td>
-      </tr>`);
-    destino.innerHTML = tabla([
-      { titulo: 'Despacho' }, { titulo: 'Destinación' }, { titulo: 'Periodo' }, { titulo: 'Importador' },
-      { titulo: 'Ítems', n: true }, { titulo: 'FOB total factura', n: true },
-    ], filas);
+    const r = await pedirLista(1);
+    if (pedido !== listaEstado.pedido) return;
+    listaEstado.total = r.total;
+    listaEstado.pagina = 1;
+    listaEstado.filas = r.resultados;
+    if (!r.total) {
+      const hayFiltros = Object.values(listaEstado.filtros).some(Boolean);
+      return mensaje(destino, hayFiltros ? 'No hay despachos con esos filtros en el período elegido.' : 'No hay despachos en este período. Cargá un mes con npm run mes en la carpeta carga.');
+    }
+    const columnas = encabezadosOrdenables(LISTA_COLUMNAS, listaEstado.orden, listaEstado.dir);
+    destino.innerHTML = `<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <p class="small text-secondary mb-0"><span id="li-contador"></span> · Clic en un despacho para ver el detalle</p>
+        <button type="button" id="b-lista-excel" class="btn btn-sm btn-outline-secondary">Exportar (CSV)</button></div>`
+      + tabla(columnas, r.resultados.map(filaLista)).replace('<div class="tabla">', '<div class="tabla grilla-scroll" id="li-grilla">');
+    contadorLista();
+    vigilarFinalLista();
   } catch (err) {
-    mensaje(destino, err.message, true);
+    if (pedido === listaEstado.pedido) mensaje(destino, err.message, true);
+  }
+}
+
+function contadorLista() {
+  const c = $('#li-contador');
+  if (c) c.textContent = `${num(listaEstado.total)} despachos${listaEstado.filas.length < listaEstado.total ? ` · mostrando ${num(listaEstado.filas.length)}` : ''}`;
+}
+
+function vigilarFinalLista() {
+  const grilla = $('#li-grilla');
+  const tbody = grilla && grilla.querySelector('tbody');
+  if (!tbody || listaEstado.filas.length >= listaEstado.total) return;
+  const centinela = document.createElement('tr');
+  centinela.innerHTML = `<td colspan="${LISTA_COLUMNAS.length}" class="text-center text-secondary small">Cargando…</td>`;
+  tbody.append(centinela);
+  listaEstado.observador = new IntersectionObserver(async (entradas) => {
+    if (!entradas[0].isIntersecting || listaEstado.cargando) return;
+    await traerMasLista(centinela);
+  }, { root: grilla, rootMargin: '0px 0px 300px 0px' });
+  listaEstado.observador.observe(centinela);
+}
+
+// Trae la página siguiente; devuelve false si no había más
+async function traerMasLista(centinela = null) {
+  if (listaEstado.filas.length >= listaEstado.total || listaEstado.cargando) return false;
+  listaEstado.cargando = true;
+  const pedido = listaEstado.pedido;
+  const marca = centinela || $('#li-grilla tbody tr:last-child');
+  try {
+    const r = await pedirLista(listaEstado.pagina + 1);
+    if (pedido !== listaEstado.pedido) return false;
+    listaEstado.pagina += 1;
+    listaEstado.filas.push(...r.resultados);
+    marca.insertAdjacentHTML('beforebegin', r.resultados.map(filaLista).join(''));
+    contadorLista();
+    if (listaEstado.filas.length >= listaEstado.total || !r.resultados.length) {
+      listaEstado.observador?.disconnect();
+      marca.remove();
+    }
+    return r.resultados.length > 0;
+  } catch (err) {
+    marca.cells[0].textContent = `No se pudieron traer más despachos: ${err.message}`;
+    listaEstado.observador?.disconnect();
+    return false;
+  } finally {
+    listaEstado.cargando = false;
+  }
+}
+
+// Anterior / Siguiente en el panel: recorren la lista tal como está filtrada y ordenada
+function actualizarNavegacion(nro) {
+  const i = listaEstado.filas.findIndex((d) => d.nro_despacho === nro);
+  document.querySelectorAll('#r-lista tr.actual').forEach((t) => t.classList.remove('actual'));
+  $('#oc-nav').hidden = i < 0;
+  if (i < 0) return;
+  const fila = document.querySelector(`#r-lista tr[data-nro="${CSS.escape(nro)}"]`);
+  if (fila) { fila.classList.add('actual'); fila.scrollIntoView({ block: 'nearest' }); }
+  $('#oc-anterior').disabled = i === 0;
+  $('#oc-siguiente').disabled = i === listaEstado.total - 1;
+}
+
+async function moverDespacho(paso) {
+  const actual = document.querySelector('#r-lista tr.actual');
+  let i = actual ? listaEstado.filas.findIndex((d) => d.nro_despacho === actual.dataset.nro) : -1;
+  if (i < 0) return;
+  i += paso;
+  if (i < 0) return;
+  if (i >= listaEstado.filas.length && !(await traerMasLista())) return;
+  const d = listaEstado.filas[i];
+  if (!d) return;
+  $('#nro').value = d.nro_despacho;
+  mostrarDespacho(d.nro_despacho);
+}
+$('#oc-anterior').addEventListener('click', () => moverDespacho(-1));
+$('#oc-siguiente').addEventListener('click', () => moverDespacho(1));
+document.addEventListener('keydown', (e) => {
+  if (!document.body.classList.contains('con-despacho') || $('#oc-nav').hidden) return;
+  if (e.target.closest('input, select, textarea')) return;
+  if (e.key === 'ArrowLeft') moverDespacho(-1);
+  if (e.key === 'ArrowRight') moverDespacho(1);
+});
+
+// CSV con lo filtrado (hasta 5.000 despachos)
+async function exportarLista() {
+  const boton = $('#b-lista-excel');
+  boton.disabled = true;
+  boton.textContent = 'Preparando…';
+  try {
+    const todas = [];
+    for (let pagina = 1; todas.length < Math.min(listaEstado.total, 5000); pagina++) {
+      const r = await pedirLista(pagina);
+      if (!r.resultados.length) break;
+      todas.push(...r.resultados);
+    }
+    const f = listaEstado.filtros;
+    const criterio = [f.anio && `Año 20${f.anio}`, f.aduana && `Aduana ${f.aduana}`, f.destinacion && `Destinación ${f.destinacion}`, f.importador && `Importador con "${f.importador}"`].filter(Boolean).join(' · ') || 'Sin filtros';
+    const lineas = [['SISTEMA COMEX - DESPACHOS'], ['Periodo', periodo() ? mes(periodo()) : 'Todos'], ['Filtros', criterio],
+      ...(listaEstado.total > todas.length ? [['Aviso', `Se exportan los primeros ${todas.length} de ${listaEstado.total}`]] : []), [],
+      ['Despacho', 'Destinacion', 'Aduana', 'Periodo', 'Importador', 'Items', 'Divisa', 'FOB total factura'],
+      ...todas.slice(0, 5000).map((d) => [d.nro_despacho, d.destinacion, `${d.aduana} ${d.aduana_desc || ''}`.trim(), mes(d.periodo),
+        d.importador, d.items, d.divisa_abrev || d.divisa, importe(d.fob_total_divisa)])];
+    const csv = '﻿' + lineas.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    enlace.download = `Despachos_${periodo() || 'todos'}${f.anio ? `_${f.anio}` : ''}${f.aduana ? `_${f.aduana}` : ''}.csv`;
+    enlace.click();
+    setTimeout(() => URL.revokeObjectURL(enlace.href), 1000);
+  } catch (err) {
+    alert(`No se pudo exportar: ${err.message}`);   // eslint-disable-line no-alert
+  } finally {
+    boton.disabled = false;
+    boton.textContent = 'Exportar (CSV)';
   }
 }
 
 $('#r-lista').addEventListener('click', (e) => {
-  const link = e.target.closest('[data-nro]');
-  if (!link) return;
-  e.preventDefault();
-  $('#nro').value = link.dataset.nro;
-  mostrarDespacho(link.dataset.nro);
-  $('#r-despacho').scrollIntoView({ behavior: 'smooth' });
+  const orden = e.target.closest('button.orden');
+  if (orden) {
+    const col = orden.dataset.orden;
+    if (listaEstado.orden === col) listaEstado.dir = listaEstado.dir === 'asc' ? 'desc' : 'asc';
+    else { listaEstado.orden = col; listaEstado.dir = col === 'importador' ? 'asc' : 'desc'; }
+    return cargarLista();
+  }
+  if (e.target.closest('#b-lista-excel')) return exportarLista();
+  const fila = e.target.closest('tr[data-nro]');
+  if (!fila) return;
+  $('#nro').value = fila.dataset.nro;
+  mostrarDespacho(fila.dataset.nro);
 });
 
-
-
+$('#f-lista').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const imp = $('#li-importador').value.trim();
+  if (imp && imp.length < 3) return mensaje($('#r-lista'), 'Escribí al menos 3 letras del importador, o dejalo vacío.', true);
+  cargarLista();
+});
+$('#b-limpiar-lista').addEventListener('click', () => {
+  $('#f-lista').reset();
+  listaEstado.orden = 'despacho';
+  listaEstado.dir = 'desc';
+  cargarLista();
+});
 
 // ---------- subpartidas ----------
 $('#f-subpartidas').addEventListener('submit', async (e) => {
@@ -897,13 +1097,7 @@ $('#r-importadores').addEventListener('click', (e) => {
   const fila = e.target.closest('tr.fila-clic');
   if (!fila) return;
   if (fila.dataset.id) return abrirImportador(Number(fila.dataset.id), fila.cells[0].textContent);
-  if (fila.dataset.nro) {
-    // Abre el despacho en su pestaña
-    document.querySelector('[data-panel="p-despacho"]').click();
-    $('#nro').value = fila.dataset.nro;
-    mostrarDespacho(fila.dataset.nro);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+  if (fila.dataset.nro) mostrarDespacho(fila.dataset.nro);   // se abre en el panel lateral
 });
 
 $('#f-importadores').addEventListener('submit', (e) => {

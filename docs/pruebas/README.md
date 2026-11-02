@@ -21,7 +21,7 @@ que registraron en la auditoría. Sin `DB_USER` o `JWT_SECRET` en el
 `.env`, se saltean en lugar de fallar.
 
 Evidencia de la última ejecución: [`salida-npm-test.txt`](salida-npm-test.txt)
-y [`salida-npm-test.png`](salida-npm-test.png) — 44 pruebas (20 unitarias y 24 de integración), 44 correctas.
+y [`salida-npm-test.png`](salida-npm-test.png) — 48 pruebas (20 unitarias y 28 de integración), 48 correctas.
 
 ## Pruebas unitarias (`api/test/unit/`)
 
@@ -94,6 +94,15 @@ Hace pedidos reales a la API y verifica en la tabla `auditoria` qué quedó regi
 | Buscar con texto | Sólo importadores cuyo nombre lo contiene | ✔ |
 | Despachos de un importador | Cantidad y FOB iguales a la base; ordenado por FOB, el primero es el mayor; importador inexistente da 404 y un id inválido 400 | ✔ |
 
+### 6. Lista de despachos (`despachos.test.js`)
+
+| Paso | Esperado | Obtenido |
+|---|---|---|
+| Filtro por año y aduana; por aduana sola | Misma cantidad que un `COUNT` en SQL; todos los números empiezan con año y aduana | ✔ |
+| Orden por número | De mayor a menor por defecto con `orden=despacho`, y de menor a mayor con `dir=asc` | ✔ |
+| Carga por partes | Las páginas seguidas dan exactamente la misma lista que un solo pedido | ✔ |
+| Filtros mal escritos | Año de 4 dígitos, aduana de 1, orden inexistente o importador de 2 letras: 400 con su mensaje | ✔ |
+
 ### Control de que las pruebas detectan errores
 
 Se modificó a propósito la API para que permita borrar usuarios que ya
@@ -153,3 +162,15 @@ Sobre una base de prueba con 644 importadores inventados:
 | Escribir 3 letras | Lista de sugerencias | [`i-03-sugerencias.png`](i-03-sugerencias.png) |
 | Elegir un importador | Sus despachos con período, destinación, aduana, procedencia, ítems y FOB; "Todos los importadores" vuelve a la grilla | [`i-04-importador.png`](i-04-importador.png) |
 | Clic en un despacho | Abre su detalle en la pestaña Despacho | [`i-05-despacho.png`](i-05-despacho.png) |
+
+## Prueba desde la interfaz (lista de despachos y panel lateral)
+
+Sobre la base de prueba, filtrando año 2026 y aduana Ezeiza:
+
+| Paso | Esperado | Captura |
+|---|---|---|
+| Filtrar por año y aduana | "1.389 despachos · mostrando 100", ordenados por número de mayor a menor; al bajar trae los siguientes | [`d-01-lista.png`](d-01-lista.png) |
+| Clic en un despacho de 40 ítems | El detalle se abre en un panel a la derecha; los ítems tienen su propia barra; la fila queda marcada en la lista | [`d-02-panel.png`](d-02-panel.png) |
+| Flecha derecha (o "Siguiente") | Muestra el despacho siguiente de la lista y mueve la marca | [`d-03-siguiente.png`](d-03-siguiente.png) |
+| Escape | Se cierra el panel; la lista sigue filtrada, con las 300 filas cargadas y en la misma posición | — |
+| En el celular | El panel ocupa toda la pantalla; Anterior y Siguiente quedan como flechas | [`d-04-celular.png`](d-04-celular.png) |

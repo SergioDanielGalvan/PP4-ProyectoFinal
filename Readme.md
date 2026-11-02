@@ -174,7 +174,7 @@ Sin la tabla, la API funciona igual y avisa una vez en el log.
 | `GET /api/health` | | estado de la conexión |
 | `GET /api/impo/periodos` | | periodos cargados con cantidad de carátulas e ítems |
 | `GET /api/impo/matriz` | `nivel` (`seccion` o `capitulo`), `seccion` (I…XXI, para capítulos), `grupos` (CONSUMO,TEMP,ZF,REDES,AAE) | FOB por sección o capítulo de la NCM y por mes, con los totales de cada grupo de operaciones |
-| `GET /api/impo/despachos` | `periodo`, `importador`, `destinacion` (IC04...), `pagina`, `tamanio` | listado paginado de despachos |
+| `GET /api/impo/despachos` | `periodo`, `anio`, `aduana`, `destinacion` (IC04...), `importador`, `orden`, `dir`, `pagina`, `tamanio` | listado paginado de despachos |
 | `GET /api/impo/despachos/:nro` | | carátula con ítems y liquidación; acepta el número sin la letra y controla el verificador |
 | `GET /api/impo/subpartidas` | `desde`, `hasta` (2 a 8 dígitos), `periodo`, `limite` | por subpartida NCM y unidad: despachos, ítems, cantidad, FOB, valor unitario y cantidad de orígenes |
 | `GET /api/impo/ncm/:ncm/precios` | `periodo` | valor unitario mínimo, promedio y máximo por origen y unidad |

@@ -96,12 +96,25 @@ const obtenerDespacho = handler(async (req, res) => {
 });
 
 const listarDespachos = handler(async (req, res) => {
+  const q = req.query;
+  const anio = (q.anio || '').trim();
+  if (anio && !/^\d{2}$/.test(anio)) throw new HttpError(400, 'El año va con 2 dígitos, como en el número de despacho (26).');
+  const aduana = (q.aduana || '').trim();
+  if (aduana && !/^\d{3}$/.test(aduana)) throw new HttpError(400, 'La aduana es un código de 3 dígitos, por ejemplo 001.');
+  const orden = q.orden || 'carga';
+  if (!model.ORDEN_DESPACHOS[orden]) throw new HttpError(400, 'orden va despacho, periodo, importador o carga.');
+  const importador = (q.importador || '').trim();
+  if (importador && importador.length < 3) throw new HttpError(400, 'Escribí al menos 3 letras del importador.');
   const filtros = {
-    periodo: periodoOpcional(req.query.periodo),
-    importador: (req.query.importador || '').trim(),
-    destinacion: destinacionOpcional(req.query.destinacion),
-    pagina: entero(req.query.pagina, 1, 1, 10000),
-    tamanio: entero(req.query.tamanio, 20, 1, 100),
+    periodo: periodoOpcional(q.periodo),
+    importador: sinComodines(importador),
+    destinacion: destinacionOpcional(q.destinacion),
+    anio: anio || null,
+    aduana: aduana || null,
+    orden,
+    dir: q.dir === 'asc' ? 'asc' : 'desc',
+    pagina: entero(q.pagina, 1, 1, 100000),
+    tamanio: entero(q.tamanio, 20, 1, 100),
   };
   res.json(await model.listarDespachos(filtros));
 });
