@@ -154,9 +154,11 @@ async function listarDespachos({ periodo, importador, destinacion, anio, aduana,
 // Resumen por subpartida NCM dentro de un rango (capítulo, partida o subpartida).
 // desde/hasta llegan como dígitos ya completados a 8 (00000000-99999999).
 // Se agrupa también por unidad: no se suman kilos con unidades.
-async function resumenSubpartidas({ desde, hasta, periodo, limite }) {
+// Filtros opcionales, los mismos de Precios: rango de períodos, país de origen,
+// región y país de procedencia, y aduana (ésta necesita la carátula).
+async function resumenSubpartidas({ desde, hasta, periodo, limite, filtros = {} }) {
   const params = [desde.slice(0, 4), hasta.slice(0, 4), desde, hasta];
-  const filtro = filtroPeriodo('i', periodo, params);
+  const filtro = filtroPeriodos('i', { ...filtros, periodo }, params) + filtroProcedenciaAduana('i', 'c', filtros, params);
   const [rows] = await pool.query(`
     SELECT p.PosicionSIM AS ncm, p.Partida AS partida, p.DescripcionNCM AS descripcion,
            i.UnidadMedida AS unidad, u.Descrip AS unidad_desc,
@@ -168,6 +170,7 @@ async function resumenSubpartidas({ desde, hasta, periodo, limite }) {
            COUNT(DISTINCT i.PaisOrigen)             AS paises_origen
     FROM posicion p
     JOIN item i ON i.IdPosicion = p.IdPosicion
+    ${filtros.aduanas?.length ? 'JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo' : ''}
     LEFT JOIN unidadesmedida u ON u.Codigo = i.UnidadMedida
     WHERE p.Partida BETWEEN ? AND ?
       AND REPLACE(p.PosicionSIM, '.', '') BETWEEN ? AND ?${filtro}
@@ -180,7 +183,7 @@ async function resumenSubpartidas({ desde, hasta, periodo, limite }) {
   const totales = subpartidas.reduce((t, r) => ({
     items: t.items + Number(r.items), fob_usd: t.fob_usd + Number(r.fob_usd || 0),
   }), { items: 0, fob_usd: 0 });
-  return { desde, hasta, periodo, recortado, totales, subpartidas };
+  return { desde, hasta, periodo, filtros, recortado, totales, subpartidas };
 }
 
 // Posiciones del KIT que abarca un código completo de partida (4 dígitos),

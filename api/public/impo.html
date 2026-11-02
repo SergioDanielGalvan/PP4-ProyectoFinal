@@ -247,9 +247,39 @@
                   <button type="button" id="b-limpiar-subpartidas" class="btn btn-outline-secondary">Limpiar</button>
                 </div>
               </div>
+              <!-- Los mismos filtros de Precios por NCM -->
+              <div class="row g-2 align-items-end mt-1" id="filtros-subpartidas">
+                <div class="col-6 col-md-3">
+                  <label for="fs-origen" class="form-label small fw-semibold text-secondary">País de origen</label>
+                  <select id="fs-origen" class="form-select form-select-sm"><option value="">Todos</option></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label for="fs-region" class="form-label small fw-semibold text-secondary">Región de procedencia</label>
+                  <select id="fs-region" class="form-select form-select-sm"><option value="">Todas</option></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label for="fs-pais" class="form-label small fw-semibold text-secondary">País de procedencia</label>
+                  <select id="fs-pais" class="form-select form-select-sm"><option value="">Todos</option></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label for="fs-aduana" class="form-label small fw-semibold text-secondary">Aduana</label>
+                  <select id="fs-aduana" class="form-select form-select-sm"><option value="">Todas</option></select>
+                </div>
+                <div class="col-6 col-md-2">
+                  <label for="fs-desde" class="form-label small fw-semibold text-secondary">Desde</label>
+                  <select id="fs-desde" class="form-select form-select-sm"><option value="">—</option></select>
+                </div>
+                <div class="col-6 col-md-2">
+                  <label for="fs-hasta" class="form-label small fw-semibold text-secondary">Hasta</label>
+                  <select id="fs-hasta" class="form-select form-select-sm"><option value="">—</option></select>
+                </div>
+                <div class="col-12 col-md-8">
+                  <p class="form-text mb-0">Sin rango, vale el período de arriba. Al abrir los precios de una subpartida se llevan los mismos filtros.</p>
+                </div>
+              </div>
             </form>
             <div class="alert alert-light border small text-muted mt-3 mb-0 py-2">
-              <i class="bi bi-info-circle me-1"></i> Capítulo (84), partida (8471), subpartida (8471.30) o NCM (8471.30.12). Montos y cantidades del período seleccionado.
+              <i class="bi bi-info-circle me-1"></i> Capítulo (84), partida (8471), subpartida (8471.30) o NCM (8471.30.12). Montos y cantidades del período y los filtros elegidos.
             </div>
           </div>
         </div>

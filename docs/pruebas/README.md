@@ -21,7 +21,7 @@ que registraron en la auditoría. Sin `DB_USER` o `JWT_SECRET` en el
 `.env`, se saltean en lugar de fallar.
 
 Evidencia de la última ejecución: [`salida-npm-test.txt`](salida-npm-test.txt)
-y [`salida-npm-test.png`](salida-npm-test.png) — 53 pruebas (20 unitarias y 33 de integración), 53 correctas.
+y [`salida-npm-test.png`](salida-npm-test.png) — 56 pruebas (20 unitarias y 36 de integración), 56 correctas.
 
 ## Pruebas unitarias (`api/test/unit/`)
 
@@ -113,6 +113,14 @@ Hace pedidos reales a la API y verifica en la tabla `auditoria` qué quedó regi
 | País y partida juntos | FOB y despachos iguales a SQL con esos filtros; el ranking sólo trae NCM de esa partida; la lista de despachos que abre el clic cuenta lo mismo | ✔ |
 | Códigos mal escritos | NCM de 3 dígitos, país de 2 u origen con letras: 400 | ✔ |
 
+### 8. Subpartidas con filtros (`subpartidas.test.js`)
+
+| Paso | Esperado | Obtenido |
+|---|---|---|
+| Capítulo sin filtros | El FOB de todas las filas es el del capítulo en la base | ✔ |
+| Con país de origen y aduana | FOB igual a SQL con esos filtros; un solo origen por fila | ✔ |
+| Rango de períodos y región de procedencia | FOB igual a SQL; región con letras, país de 2 dígitos o rango invertido: 400 | ✔ |
+
 ### Control de que las pruebas detectan errores
 
 Se modificó a propósito la API para que permita borrar usuarios que ya
@@ -196,3 +204,10 @@ Sobre la base de prueba, filtrando año 2026 y aduana Ezeiza:
 | Clic en un despacho | Se abre en el panel lateral | [`t-05-panel.png`](t-05-panel.png) |
 | Clic en una aduana | Lista de despachos de esa aduana con los filtros del tablero | — |
 | En el celular | Las tarjetas y gráficos se apilan; el ranking muestra sólo el código NCM | [`t-06-celular.png`](t-06-celular.png) |
+
+## Prueba desde la interfaz (filtros de Subpartidas)
+
+| Paso | Esperado | Captura |
+|---|---|---|
+| Partida 8471 con origen China y aduana Ezeiza | Sólo esas importaciones; los filtros figuran debajo del título y en el CSV | [`s-01-subpartidas-filtros.png`](s-01-subpartidas-filtros.png) |
+| Clic en una NCM | Abre Precios por NCM con los mismos filtros ya elegidos | [`s-02-precios-con-filtros.png`](s-02-precios-con-filtros.png) |

@@ -560,8 +560,13 @@ $('#f-subpartidas').addEventListener('submit', async (e) => {
   if (!desde) return mensaje(destino, 'Escribí al menos el comienzo del rango, por ejemplo 8471 o 84.', true);
   try {
     const hasta = $('#hasta').value.trim();
-    const r = await api('/subpartidas', { desde, hasta, periodo: periodo() });
-    if (r.subpartidas.length === 0) return mensaje(destino, 'No hay importaciones en ese rango para el periodo elegido.');
+    const f = filtrosDe('fs');
+    const r = await api('/subpartidas', {
+      desde, hasta, periodo: periodo(),
+      origenes: f.origenes, region: f.region, paises: f.paises, aduanas: f.aduanas, periodo_desde: f.desde, periodo_hasta: f.hasta,
+    });
+    const criterio = textoFiltrosDe('fs');
+    if (r.subpartidas.length === 0) return mensaje(destino, `No hay importaciones en ese rango con esos filtros (${criterio}).`);
 
     const filas = r.subpartidas.map((s) => `
       <tr>
@@ -589,8 +594,7 @@ $('#f-subpartidas').addEventListener('submit', async (e) => {
       <div class="reporte-print-header">
         <h2 style="margin: 0 0 0.25rem 0;">Consulta de Subpartidas NCM</h2>
         <p style="margin: 0 0 1rem 0; color: #555; font-size: 0.9rem;">
-          <strong>Rango:</strong> ${esc(desde)}${hasta ? ' hasta ' + esc(hasta) : ''} · 
-          <strong>Período:</strong> ${periodo() ? mes(periodo()) : 'Todos'}
+          <strong>Rango:</strong> ${esc(desde)}${hasta ? ' hasta ' + esc(hasta) : ''} · ${esc(criterio)}
         </p>
       </div>` + tabla([
       { titulo: 'NCM' }, { titulo: 'Mercadería' }, { titulo: 'Despachos', n: true }, { titulo: 'Ítems', n: true },
@@ -622,7 +626,7 @@ $('#f-subpartidas').addEventListener('submit', async (e) => {
         const lineas = [
           ['SISTEMA COMEX - CONSULTA DE SUBPARTIDAS'],
           ['Rango', `${desde}${hasta ? ' a ' + hasta : ''}`],
-          ['Periodo', periodo() ? mes(periodo()) : 'Todos'],
+          ['Filtros', criterio],
           [],
           ['NCM', 'Mercaderia', 'Despachos', 'Items', 'Cantidad', 'Unidad', 'FOB USD', 'Valor Unitario USD', 'Paises Origen']
         ];
@@ -666,6 +670,8 @@ $('#f-subpartidas').addEventListener('submit', async (e) => {
 $('#b-limpiar-subpartidas').addEventListener('click', () => {
   $('#desde').value = '';
   $('#hasta').value = '';
+  ['origen', 'region', 'aduana', 'desde', 'hasta'].forEach((c) => { $(`#fs-${c}`).value = ''; });
+  $('#fs-region').dispatchEvent(new Event('change'));
   $('#r-subpartidas').innerHTML = '';
   $('#desde').focus();
 });
@@ -677,7 +683,7 @@ $('#r-subpartidas').addEventListener('click', (e) => {
   e.preventDefault();
   $('#ncm').value = link.dataset.ncm;
   document.querySelector('[data-panel="p-ncm"]').click();
-  $('#f-ncm').requestSubmit();
+  copiarFiltros('fs', 'fn').then(() => $('#f-ncm').requestSubmit());
 });
 
 
@@ -693,56 +699,70 @@ function obtenerCatalogos() {
 }
 const opcionesDe = (lista, texto) => lista.map((x) => `<option value="${esc(x.codigo)}">${esc(texto(x))}</option>`).join('');
 
-let catalogosCargados = null;
-function cargarFiltrosNcm() {
-  if (catalogosCargados) return catalogosCargados;
-  catalogosCargados = obtenerCatalogos().then((c) => {
+// Filtros de origen, procedencia, aduana y rango de períodos. Los usan Precios
+// por NCM (prefijo "fn") y Subpartidas (prefijo "fs"), con los mismos campos.
+const filtrosCargados = {};
+function prepararFiltros(pref) {
+  if (filtrosCargados[pref]) return filtrosCargados[pref];
+  filtrosCargados[pref] = obtenerCatalogos().then((c) => {
     const opciones = opcionesDe;
-    $('#fn-region').insertAdjacentHTML('beforeend', opciones(c.regiones, (r) => r.nombre));
-    $('#fn-aduana').insertAdjacentHTML('beforeend', opciones(c.aduanas, (a) => `${a.descrip} (${a.codigo})`));
+    $(`#${pref}-region`).insertAdjacentHTML('beforeend', opciones(c.regiones, (r) => r.nombre));
+    $(`#${pref}-aduana`).insertAdjacentHTML('beforeend', opciones(c.aduanas, (a) => `${a.descrip} (${a.codigo})`));
     const paises = c.paises;
-    $('#fn-origen').insertAdjacentHTML('beforeend', opciones(paises, (p) => `${p.descrip} (${p.codigo})`));
+    $(`#${pref}-origen`).insertAdjacentHTML('beforeend', opciones(paises, (p) => `${p.descrip} (${p.codigo})`));
     const llenarPaises = () => {
-      const region = $('#fn-region').value;
-      const elegido = $('#fn-pais').value;
-      $('#fn-pais').innerHTML = '<option value="">Todos</option>'
+      const region = $(`#${pref}-region`).value;
+      const elegido = $(`#${pref}-pais`).value;
+      $(`#${pref}-pais`).innerHTML = '<option value="">Todos</option>'
         + opciones(paises.filter((p) => !region || p.codigo.startsWith(region)), (p) => `${p.descrip} (${p.codigo})`);
-      if ([...$('#fn-pais').options].some((o) => o.value === elegido)) $('#fn-pais').value = elegido;
+      if ([...$(`#${pref}-pais`).options].some((o) => o.value === elegido)) $(`#${pref}-pais`).value = elegido;
     };
     llenarPaises();
-    $('#fn-region').addEventListener('change', llenarPaises);
+    $(`#${pref}-region`).addEventListener('change', llenarPaises);
     // Los períodos son los mismos del selector de arriba
     const meses = [...$('#periodo').options].filter((o) => o.value).map((o) => `<option value="${o.value}">${mes(o.value)}</option>`).join('');
-    $('#fn-desde').insertAdjacentHTML('beforeend', meses);
-    $('#fn-hasta').insertAdjacentHTML('beforeend', meses);
-  }).catch(() => { catalogosCargados = null; });
-  return catalogosCargados;
+    $(`#${pref}-desde`).insertAdjacentHTML('beforeend', meses);
+    $(`#${pref}-hasta`).insertAdjacentHTML('beforeend', meses);
+  }).catch(() => { filtrosCargados[pref] = null; });
+  return filtrosCargados[pref];
 }
+const cargarFiltrosNcm = () => prepararFiltros('fn');
 document.querySelector('[data-panel="p-ncm"]').addEventListener('click', cargarFiltrosNcm);
+document.querySelector('[data-panel="p-subpartidas"]').addEventListener('click', () => prepararFiltros('fs'));
 
-function filtrosNcm() {
+function filtrosDe(pref) {
   return {
-    origenes: $('#fn-origen').value,
-    region: $('#fn-region').value,
-    paises: $('#fn-pais').value,
-    aduanas: $('#fn-aduana').value,
-    desde: $('#fn-desde').value,
-    hasta: $('#fn-hasta').value,
+    origenes: $(`#${pref}-origen`).value,
+    region: $(`#${pref}-region`).value,
+    paises: $(`#${pref}-pais`).value,
+    aduanas: $(`#${pref}-aduana`).value,
+    desde: $(`#${pref}-desde`).value,
+    hasta: $(`#${pref}-hasta`).value,
   };
 }
+const filtrosNcm = () => filtrosDe('fn');
 
 // Texto con los filtros aplicados, para la pantalla y el CSV
-function textoFiltrosNcm() {
-  const f = filtrosNcm();
+function textoFiltrosDe(pref) {
+  const f = filtrosDe(pref);
   const sel = (id) => $(id).selectedOptions[0]?.textContent || '';
   const partes = [];
   if (f.desde || f.hasta) partes.push(`Períodos ${f.desde ? mes(f.desde) : 'inicio'} a ${f.hasta ? mes(f.hasta) : 'último'}`);
   else partes.push(`Período ${periodo() ? mes(periodo()) : 'todos'}`);
-  if (f.origenes) partes.push(`Origen ${sel('#fn-origen')}`);
-  if (f.paises) partes.push(`Procedencia ${sel('#fn-pais')}`);
-  else if (f.region) partes.push(`Procedencia ${sel('#fn-region')}`);
-  if (f.aduanas) partes.push(`Aduana ${sel('#fn-aduana')}`);
+  if (f.origenes) partes.push(`Origen ${sel(`#${pref}-origen`)}`);
+  if (f.paises) partes.push(`Procedencia ${sel(`#${pref}-pais`)}`);
+  else if (f.region) partes.push(`Procedencia ${sel(`#${pref}-region`)}`);
+  if (f.aduanas) partes.push(`Aduana ${sel(`#${pref}-aduana`)}`);
   return partes.join(' · ');
+}
+const textoFiltrosNcm = () => textoFiltrosDe('fn');
+
+// Pasa los filtros de Subpartidas a Precios (al abrir los precios de una NCM)
+async function copiarFiltros(de, a) {
+  await Promise.all([prepararFiltros(de), prepararFiltros(a)]);
+  for (const campo of ['origen', 'region', 'aduana', 'desde', 'hasta']) $(`#${a}-${campo}`).value = $(`#${de}-${campo}`).value;
+  $(`#${a}-region`).dispatchEvent(new Event('change'));   // rearma la lista de países de procedencia
+  $(`#${a}-pais`).value = $(`#${de}-pais`).value;
 }
 $('#f-ncm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1329,7 +1349,7 @@ $('#r-triangulaciones').addEventListener('click', (e) => {
   e.preventDefault();
   $('#ncm').value = link.dataset.ncm;
   document.querySelector('[data-panel="p-ncm"]').click();
-  $('#f-ncm').requestSubmit();
+  copiarFiltros('fs', 'fn').then(() => $('#f-ncm').requestSubmit());
 });
 
 // ---------- matriz ----------

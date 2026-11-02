@@ -75,10 +75,15 @@ const matriz = handler(async (req, res) => {
 
 const resumenSubpartidas = handler(async (req, res) => {
   const { desde, hasta } = rangoNcm(req.query.desde, req.query.hasta);
+  // Mismos filtros que Precios; el rango de NCM usa "desde"/"hasta", así que el
+  // rango de períodos llega como periodo_desde / periodo_hasta
+  const { periodo, desde: pDesde, hasta: pHasta, ...resto } = filtrosPrecios({
+    ...req.query, desde: req.query.periodo_desde, hasta: req.query.periodo_hasta,
+  });
   res.json(await model.resumenSubpartidas({
-    desde, hasta,
-    periodo: periodoOpcional(req.query.periodo),
+    desde, hasta, periodo,
     limite: entero(req.query.limite, 300, 1, 1000),
+    filtros: { desde: pDesde, hasta: pHasta, ...resto },
   }));
 });
 

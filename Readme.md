@@ -177,7 +177,7 @@ Sin la tabla, la API funciona igual y avisa una vez en el log.
 | `GET /api/impo/tablero` | `periodo`, `pais`, `ncm` | indicadores, países, meses, NCM y aduanas para la pestaña Tablero |
 | `GET /api/impo/despachos` | `periodo`, `anio`, `aduana`, `destinacion` (IC04...), `importador`, `ncm`, `origen`, `orden`, `dir`, `pagina`, `tamanio` | listado paginado de despachos |
 | `GET /api/impo/despachos/:nro` | | carátula con ítems y liquidación; acepta el número sin la letra y controla el verificador |
-| `GET /api/impo/subpartidas` | `desde`, `hasta` (2 a 8 dígitos), `periodo`, `limite` | por subpartida NCM y unidad: despachos, ítems, cantidad, FOB, valor unitario y cantidad de orígenes |
+| `GET /api/impo/subpartidas` | `desde`, `hasta` (2 a 8 dígitos), `periodo`, `limite`, `origenes`, `region`, `paises`, `aduanas`, `periodo_desde`, `periodo_hasta` | por subpartida NCM y unidad: despachos, ítems, cantidad, FOB, valor unitario y cantidad de orígenes |
 | `GET /api/impo/ncm/:ncm/precios` | `periodo` | valor unitario mínimo, promedio y máximo por origen y unidad |
 | `GET /api/impo/ncm/:ncm/valores-bajos` | `periodo`, `umbral` (0-1), `limite` | ítems con valor unitario bajo el umbral del promedio |
 | `GET /api/impo/importadores` | `q` (mín. 3 letras), `periodo` | despachos, ítems y FOB |
