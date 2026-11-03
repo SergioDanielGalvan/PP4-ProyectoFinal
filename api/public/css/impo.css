@@ -371,7 +371,7 @@ tr.fila-clic:hover td { background-color: #eef4ff; }
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06); padding: 0.9rem 1rem; height: 100%;
 }
 .tb-tarjeta h3 { font-size: 0.95rem; font-weight: 700; text-align: center; margin-bottom: 0.6rem; color: #0f172a; }
-.mosaico { position: relative; height: 340px; }
+.mosaico { position: relative; height: 340px; overflow: hidden; }
 .mosaico .celda {
   position: absolute; box-sizing: border-box; border: 2px solid #fff; padding: 0.35rem 0.5rem;
   color: #fff; font-size: 0.85rem; overflow: hidden; cursor: pointer;
@@ -473,3 +473,6 @@ tr.actual td { background-color: #e0ebff !important; }
 @media print {
   .ac-lista { display: none !important; }
 }
+
+/* Título "Operaciones incluidas" (Tablero y Matriz): Bootstrap no trae fs-7 */
+fieldset.grupos legend { font-size: 0.75rem; letter-spacing: 0.03em; }

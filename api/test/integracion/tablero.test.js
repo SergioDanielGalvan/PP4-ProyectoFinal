@@ -16,11 +16,16 @@ describe('Tablero', { skip: sinBase }, () => {
   });
   after(async () => { await limpiar(); await pool.end(); });
 
+  // Por defecto el tablero deja afuera las destinaciones de los grupos sin PorDefecto (REDES, AAE)
+  const SIN_EXCLUIDOS = `c.Destinacion NOT IN (SELECT gd.Destinacion FROM grupo_destinacion gd
+    JOIN grupo g ON g.Codigo = gd.Grupo WHERE g.PorDefecto = 0)`;
+
   test('los indicadores coinciden con la base', async () => {
     const [[base]] = await pool.query(`
       SELECT SUM(i.FobTotalDolares) AS fob, COUNT(DISTINCT i.IdOperacion, i.Periodo) AS despachos,
              COUNT(DISTINCT c.IdImportador) AS importadores, COUNT(DISTINCT i.PaisOrigen) AS paises
-      FROM item i JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo`);
+      FROM item i JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
+      WHERE ${SIN_EXCLUIDOS}`);
     const k = (await pedir().expect(200)).body.indicadores;
     assert.ok(cerca(k.fob, base.fob));
     assert.equal(k.despachos, Number(base.despachos));
@@ -54,15 +59,33 @@ describe('Tablero', { skip: sinBase }, () => {
     const [[base]] = await pool.query(`
       SELECT SUM(i.FobTotalDolares) AS fob, COUNT(DISTINCT i.IdOperacion, i.Periodo) AS despachos
       FROM item i JOIN posicion p ON p.IdPosicion = i.IdPosicion
-      WHERE i.PaisOrigen = ? AND p.PosicionSIM LIKE ?`, [uno.pais, `${uno.partida}%`]);
+      JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
+      WHERE i.PaisOrigen = ? AND p.PosicionSIM LIKE ? AND ${SIN_EXCLUIDOS}`, [uno.pais, `${uno.partida}%`]);
     const d = (await pedir({ pais: uno.pais, ncm: uno.partida }).expect(200)).body;
     assert.ok(cerca(d.indicadores.fob, base.fob));
     assert.equal(d.indicadores.despachos, Number(base.despachos));
     assert.ok(d.ncm.every((n) => n.ncm.replace(/\./g, '').startsWith(uno.partida)));
 
     // La lista de despachos con los mismos filtros (lo que abre un clic en el tablero)
-    const lista = await request(app).get('/api/impo/despachos').query({ ncm: uno.partida, origen: uno.pais, tamanio: 1 }).set(auth).expect(200);
+    const grupos = d.grupos.filter((g) => g.incluido).map((g) => g.codigo).join(',');
+    const lista = await request(app).get('/api/impo/despachos').query({ ncm: uno.partida, origen: uno.pais, grupos, tamanio: 1 }).set(auth).expect(200);
     assert.equal(lista.body.total, Number(base.despachos));
+  });
+
+  test('grupos de destinación: por defecto sin energía por redes ni AAE; con todos, suma todo', async () => {
+    const def = (await pedir().expect(200)).body;
+    assert.deepEqual(def.grupos.filter((g) => !g.incluido).map((g) => g.codigo).sort(), ['AAE', 'REDES']);
+    const todos = def.grupos.map((g) => g.codigo).join(',');
+    const [[base]] = await pool.query('SELECT SUM(FobTotalDolares) AS fob FROM item');
+    const t = (await pedir({ grupos: todos }).expect(200)).body;
+    assert.ok(cerca(t.indicadores.fob, base.fob), 'con todos los grupos suma todo el archivo');
+    const [[redes]] = await pool.query(`
+      SELECT COALESCE(SUM(i.FobTotalDolares), 0) AS fob FROM item i
+      JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
+      JOIN grupo_destinacion gd ON gd.Destinacion = c.Destinacion WHERE gd.Grupo = 'REDES'`);
+    const r = (await pedir({ grupos: 'REDES' }).expect(200)).body;
+    assert.ok(cerca(r.indicadores.fob, redes.fob), 'sólo energía por redes');
+    await pedir({ grupos: 'consumo;temp' }).expect(400);
   });
 
   test('rechaza códigos mal escritos (400)', async () => {

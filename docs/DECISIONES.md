@@ -392,7 +392,10 @@ courier.
 **Grupos de destinación.** `grupo_destinacion` guarda sólo las excepciones;
 toda destinación que no figura es CONSUMO. Por defecto el gráfico incluye
 CONSUMO, TEMP (nacionalización de temporarias) y ZF (egreso de zona franca),
-y deja afuera REDES y AAE, que se pueden sumar con una casilla. Pendiente de
+y deja afuera REDES y AAE, que se pueden sumar con una casilla. El Tablero usa
+los mismos grupos y los mismos valores por defecto: sin ellos, la energía
+eléctrica de IC01 encabezaba el ranking de NCM con más del triple de la
+siguiente e inflaba a los países limítrofes. Pendiente de
 confirmar con la despachante el tratamiento de AAE y ZF.
 
 **Cálculo.** Una sola consulta agrupada por periodo, grupo y capítulo (unas

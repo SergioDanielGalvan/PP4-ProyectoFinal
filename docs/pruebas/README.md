@@ -21,7 +21,7 @@ que registraron en la auditoría. Sin `DB_USER` o `JWT_SECRET` en el
 `.env`, se saltean en lugar de fallar.
 
 Evidencia de la última ejecución: [`salida-npm-test.txt`](salida-npm-test.txt)
-y [`salida-npm-test.png`](salida-npm-test.png) — 56 pruebas (20 unitarias y 36 de integración), 56 correctas.
+y [`salida-npm-test.png`](salida-npm-test.png) — 57 pruebas (20 unitarias y 37 de integración), 57 correctas.
 
 ## Pruebas unitarias (`api/test/unit/`)
 
@@ -111,6 +111,7 @@ Hace pedidos reales a la API y verifica en la tabla `auditoria` qué quedó regi
 | Mosaico de países | Hasta 10 países más "Resto"; las participaciones suman 100 % y los FOB suman el total | ✔ |
 | Meses | Suman el total; con un período elegido, los indicadores son los de ese mes y la evolución mensual sigue completa | ✔ |
 | País y partida juntos | FOB y despachos iguales a SQL con esos filtros; el ranking sólo trae NCM de esa partida; la lista de despachos que abre el clic cuenta lo mismo | ✔ |
+| Grupos de destinación | Por defecto quedan afuera REDES y AAE y los indicadores coinciden con SQL sin esas destinaciones; con todos los grupos suma todo el archivo; con sólo REDES, sólo la energía por redes | ✔ |
 | Códigos mal escritos | NCM de 3 dígitos, país de 2 u origen con letras: 400 | ✔ |
 
 ### 8. Subpartidas con filtros (`subpartidas.test.js`)
@@ -204,6 +205,8 @@ Sobre la base de prueba, filtrando año 2026 y aduana Ezeiza:
 | Clic en un despacho | Se abre en el panel lateral | [`t-05-panel.png`](t-05-panel.png) |
 | Clic en una aduana | Lista de despachos de esa aduana con los filtros del tablero | — |
 | En el celular | Las tarjetas y gráficos se apilan; el ranking muestra sólo el código NCM | [`t-06-celular.png`](t-06-celular.png) |
+| Operaciones incluidas, por defecto | Sin energía por redes ni Tierra del Fuego, como la Matriz; el subtítulo lo aclara | [`g-01-sin-redes.png`](g-01-sin-redes.png) |
+| Marcar "Energía por redes" | La energía eléctrica (2716.00.00) pasa a encabezar el ranking y Paraguay, Uruguay y Brasil suben en el mosaico (datos inventados) | [`g-02-con-redes.png`](g-02-con-redes.png) |
 
 ## Prueba desde la interfaz (filtros de Subpartidas)
 

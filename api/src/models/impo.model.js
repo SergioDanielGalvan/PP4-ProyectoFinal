@@ -90,7 +90,7 @@ const ORDEN_DESPACHOS = {
   carga: 'c.Periodo {dir}, c.IdOperacion {dir}',
 };
 
-async function listarDespachos({ periodo, importador, destinacion, anio, aduana, ncm, origen, orden = 'carga', dir = 'desc', pagina, tamanio }) {
+async function listarDespachos({ periodo, importador, destinacion, anio, aduana, ncm, origen, grupos, orden = 'carga', dir = 'desc', pagina, tamanio }) {
   const params = [];
   let where = 'WHERE 1 = 1';
   where += filtroPeriodo('c', periodo, params);
@@ -105,6 +105,11 @@ async function listarDespachos({ periodo, importador, destinacion, anio, aduana,
   } else if (aduana) {
     where += ' AND c.AduanaOficializacion = ?';
     params.push(aduana);
+  }
+  // Grupos de destinación: sólo cuando llegan (desde el Tablero); sin ellos, todas
+  if (grupos) {
+    const fg = await filtroGrupos(grupos);
+    if (fg.sql) { where += ` AND ${fg.sql}`; params.push(...fg.valores); }
   }
   // NCM (capítulo a NCM) y país de origen: despachos con al menos un ítem que cumpla
   if (ncm || origen) {
@@ -519,6 +524,36 @@ async function idsDeCodigo(digitos) {
   return rows.map((r) => r.id);
 }
 
+// Grupos de destinación (los de la Matriz) -> condición sobre c.Destinacion.
+// grupo_destinacion guarda sólo las excepciones: lo que no figura es CONSUMO.
+// grupos = null usa los que tienen PorDefecto (deja afuera energía por redes y AAE).
+let cacheGrupos = null;
+async function gruposDestinacion() {
+  if (cacheGrupos && Date.now() - cacheGrupos.hora < 60 * 60 * 1000) return cacheGrupos;
+  const [grupos] = await pool.query('SELECT Codigo AS codigo, Descrip AS descrip, PorDefecto AS por_defecto FROM grupo ORDER BY Orden');
+  const [destinaciones] = await pool.query('SELECT Destinacion AS destinacion, Grupo AS grupo FROM grupo_destinacion');
+  cacheGrupos = { hora: Date.now(), grupos, destinaciones };
+  return cacheGrupos;
+}
+
+async function filtroGrupos(grupos, aliasCaratula = 'c') {
+  const g = await gruposDestinacion();
+  const incluidos = new Set(grupos || g.grupos.filter((x) => x.por_defecto).map((x) => x.codigo));
+  const lista = g.grupos.map((x) => ({ ...x, por_defecto: Boolean(x.por_defecto), incluido: incluidos.has(x.codigo) }));
+  const fuera = g.destinaciones.filter((d) => !incluidos.has(d.grupo)).map((d) => d.destinacion);
+  const dentro = g.destinaciones.filter((d) => incluidos.has(d.grupo)).map((d) => d.destinacion);
+  let sql = null;
+  const valores = [];
+  if (incluidos.has('CONSUMO')) {
+    if (fuera.length) { sql = `${aliasCaratula}.Destinacion NOT IN (?)`; valores.push(fuera); }
+  } else if (dentro.length) {
+    sql = `${aliasCaratula}.Destinacion IN (?)`; valores.push(dentro);
+  } else {
+    sql = '1 = 0';
+  }
+  return { sql, valores, grupos: lista };
+}
+
 // Mes anterior a AAAAMM
 const mesAnterior = (p) => (p % 100 === 1 ? p - 89 : p - 1);
 
@@ -539,8 +574,9 @@ function tablero(filtros) {
   return promesa;
 }
 
-async function calcularTablero({ periodo, pais, ncm }) {
+async function calcularTablero({ periodo, pais, ncm, grupos }) {
   const ids = ncm ? await idsDeCodigo(ncm) : null;
+  const fg = await filtroGrupos(grupos);
   const descripcionNcm = ncm ? await describirCodigo(ncm) : null;
   // Condición de ítem común (país de origen y NCM) y, aparte, la de período
   const condicion = (conPeriodo, per = periodo, conPais = true) => {
@@ -549,6 +585,7 @@ async function calcularTablero({ periodo, pais, ncm }) {
     if (conPeriodo && per !== null) { partes.push('i.Periodo = ?'); valores.push(per); }
     if (pais && conPais) { partes.push('i.PaisOrigen = ?'); valores.push(pais); }
     if (ids) { partes.push(ids.length ? 'i.IdPosicion IN (?)' : '1 = 0'); if (ids.length) valores.push(ids); }
+    if (fg.sql) { partes.push(fg.sql); valores.push(...fg.valores); }
     return { where: partes.length ? `WHERE ${partes.join(' AND ')}` : '', valores };
   };
   const indicadores = async (per) => {
@@ -572,15 +609,18 @@ async function calcularTablero({ periodo, pais, ncm }) {
     periodo !== null ? indicadores(mesAnterior(periodo)) : Promise.resolve(null),
     pool.query(`
       SELECT i.PaisOrigen AS codigo, p.Descrip AS descrip, SUM(i.FobTotalDolares) AS fob
-      FROM item i LEFT JOIN paises p ON p.Codigo = i.PaisOrigen
+      FROM item i JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
+      LEFT JOIN paises p ON p.Codigo = i.PaisOrigen
       ${paraPaises.where} GROUP BY i.PaisOrigen, p.Descrip ORDER BY fob DESC`, paraPaises.valores),
     pool.query(`
       SELECT i.Periodo AS periodo, SUM(i.FobTotalDolares) AS fob, COUNT(DISTINCT i.IdOperacion) AS despachos
-      FROM item i ${sinPer.where} GROUP BY i.Periodo ORDER BY i.Periodo`, sinPer.valores),
+      FROM item i JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
+      ${sinPer.where} GROUP BY i.Periodo ORDER BY i.Periodo`, sinPer.valores),
     pool.query(`
       SELECT pos.PosicionSIM AS ncm, pos.DescripcionNCM AS descripcion, t.fob, t.items
       FROM (SELECT i.IdPosicion, SUM(i.FobTotalDolares) AS fob, COUNT(*) AS items
-            FROM item i ${conPer.where} GROUP BY i.IdPosicion ORDER BY fob DESC LIMIT 50) t
+            FROM item i JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
+            ${conPer.where} GROUP BY i.IdPosicion ORDER BY fob DESC LIMIT 50) t
       JOIN posicion pos ON pos.IdPosicion = t.IdPosicion
       ORDER BY t.fob DESC`, conPer.valores),
     pool.query(`
@@ -601,6 +641,7 @@ async function calcularTablero({ periodo, pais, ncm }) {
   const anteriorCargado = anterior && Number(anterior.items) > 0 ? anterior : null;
   return {
     filtros: { periodo, pais, ncm, ncm_descripcion: descripcionNcm },
+    grupos: fg.grupos,
     indicadores: { ...actual, periodo_anterior: anteriorCargado ? mesAnterior(periodo) : null, anterior: anteriorCargado },
     paises: top,
     meses,

@@ -65,12 +65,7 @@ const matriz = handler(async (req, res) => {
     seccion = String(req.query.seccion || '').trim().toUpperCase();
     if (!/^[IVX]{1,5}$/.test(seccion)) throw new HttpError(400, 'Para ver capítulos indicá la sección en números romanos, por ejemplo seccion=XVI.');
   }
-  let grupos = null;
-  if (req.query.grupos !== undefined) {
-    grupos = String(req.query.grupos).split(',').map((g) => g.trim().toUpperCase()).filter(Boolean);
-    if (grupos.some((g) => !/^[A-Z]{2,10}$/.test(g))) throw new HttpError(400, 'grupos es una lista de códigos separados por coma, por ejemplo CONSUMO,TEMP.');
-  }
-  res.json(await model.matriz({ nivel, seccion, grupos }));
+  res.json(await model.matriz({ nivel, seccion, grupos: listaGrupos(req.query.grupos) }));
 });
 
 const resumenSubpartidas = handler(async (req, res) => {
@@ -100,6 +95,14 @@ const obtenerDespacho = handler(async (req, res) => {
   res.json(despacho);
 });
 
+// Grupos de destinación (CONSUMO,TEMP,ZF,REDES,AAE); sin el parámetro, null = los de por defecto
+function listaGrupos(v) {
+  if (v === undefined) return null;
+  const grupos = String(v).split(',').map((g) => g.trim().toUpperCase()).filter(Boolean);
+  if (grupos.some((g) => !/^[A-Z]{2,10}$/.test(g))) throw new HttpError(400, 'grupos es una lista de códigos separados por coma, por ejemplo CONSUMO,TEMP.');
+  return grupos;
+}
+
 // País del KIT: 3 dígitos
 function paisOpcional(v, nombre) {
   if (v === undefined || v === '') return null;
@@ -113,6 +116,7 @@ const tablero = handler(async (req, res) => {
     periodo: periodoOpcional(req.query.periodo),
     pais: paisOpcional(req.query.pais, 'pais'),
     ncm: req.query.ncm ? codigoNcm(req.query.ncm) : null,
+    grupos: listaGrupos(req.query.grupos),
   }));
 });
 
@@ -134,6 +138,7 @@ const listarDespachos = handler(async (req, res) => {
     aduana: aduana || null,
     ncm: q.ncm ? codigoNcm(q.ncm) : null,
     origen: paisOpcional(q.origen, 'origen'),
+    grupos: listaGrupos(q.grupos),
     orden,
     dir: q.dir === 'asc' ? 'asc' : 'desc',
     pagina: entero(q.pagina, 1, 1, 100000),

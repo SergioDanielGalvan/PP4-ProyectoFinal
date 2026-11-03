@@ -360,7 +360,7 @@ function leerFiltrosLista() {
 
 // listaEstado.extra: NCM y país de origen que llegan desde el Tablero (no tienen campo propio)
 const pedirLista = (pagina) => api('/despachos', {
-  periodo: periodo(), ...listaEstado.filtros, ncm: listaEstado.extra?.ncm, origen: listaEstado.extra?.origen,
+  periodo: periodo(), ...listaEstado.filtros, ncm: listaEstado.extra?.ncm, origen: listaEstado.extra?.origen, grupos: listaEstado.extra?.grupos,
   orden: listaEstado.orden, dir: listaEstado.dir, pagina, tamanio: PARTE_LISTA,
 });
 
@@ -1613,7 +1613,7 @@ cargarPeriodos().then(cargarTablero);   // el Tablero es la pestaña de inicio; 
 // Indicadores del período, participación por país (mosaico), evolución
 // mensual, ranking de NCM y de aduanas. Todo se puede tocar: un país filtra el
 // tablero, un mes cambia el período, una NCM o una aduana abre sus despachos.
-const tbEstado = { periodo: undefined, pais: '', ncm: '', datos: null, graficos: [], pedido: 0, filtrosListos: false };
+const tbEstado = { periodo: undefined, pais: '', ncm: '', grupos: null, datos: null, graficos: [], pedido: 0, filtrosListos: false };
 // Paleta propia de la página: la de la Matriz más tres tonos, y gris para "Resto"
 const PALETA_MOSAICO = [...COLORES, '#0e9aa7', '#b4552d', '#5b6b74', GRIS_RESTO];
 const TEXTO_OSCURO = new Set(['#eda100', '#e87ba4', GRIS_RESTO]);
@@ -1636,7 +1636,7 @@ async function cargarTablero() {
   tbEstado.periodo = periodo();
   destino.innerHTML = '<p class="nota">Armando el tablero (la primera vez de cada combinación tarda unos segundos)…</p>';
   try {
-    const d = await api('/tablero', { periodo: periodo(), pais: tbEstado.pais, ncm: tbEstado.ncm });
+    const d = await api('/tablero', { periodo: periodo(), pais: tbEstado.pais, ncm: tbEstado.ncm, grupos: tbEstado.grupos?.join(',') });
     if (pedido !== tbEstado.pedido) return;
     tbEstado.datos = d;
     dibujarTablero(d);
@@ -1657,15 +1657,29 @@ function tarjetaKpi(icono, valor, nombre, extra = '') {
     <div><div class="valor">${valor}</div><div class="nombre">${nombre}</div>${extra}</div></div></div>`;
 }
 
+// Casillas de grupos de destinación, las mismas de la Matriz. Por defecto quedan
+// afuera la energía por redes (IC01) y el egreso de Tierra del Fuego.
+function dibujarGruposTablero(grupos) {
+  if (!tbEstado.grupos) tbEstado.grupos = grupos.filter((g) => g.incluido).map((g) => g.codigo);
+  $('#tb-grupos').innerHTML = '<legend class="float-none w-auto px-2 fs-7 fw-bold text-uppercase text-secondary mb-0">Operaciones incluidas</legend>'
+    + grupos.map((g) => `<label class="me-3 small"><input type="checkbox" class="form-check-input me-1" value="${esc(g.codigo)}" ${g.incluido ? 'checked' : ''}>${esc(g.descrip)}</label>`).join('');
+}
+$('#tb-grupos').addEventListener('change', () => {
+  tbEstado.grupos = [...document.querySelectorAll('#tb-grupos input:checked')].map((i) => i.value);
+  cargarTablero();
+});
+
 function dibujarTablero(d) {
   tbEstado.graficos.forEach((g) => g.destroy());
   tbEstado.graficos = [];
+  dibujarGruposTablero(d.grupos);
   const k = d.indicadores;
   const a = k.anterior;
   const per = periodo() ? mes(periodo()) : 'todos los meses cargados';
   const filtros = [d.filtros.pais && (d.paises.find((p) => p.codigo === d.filtros.pais)?.descrip || `país ${d.filtros.pais}`),
     d.filtros.ncm_descripcion].filter(Boolean);
-  $('#tb-subtitulo').textContent = `FOB declarado en millones de US$ · ${per}${filtros.length ? ` · ${filtros.join(' · ')}` : ''}`;
+  const excluidos = d.grupos.filter((g) => !g.incluido).map((g) => g.descrip.replace(/ \(.*\)$/, '').toLowerCase());
+  $('#tb-subtitulo').textContent = `FOB declarado en millones de US$ · ${per}${filtros.length ? ` · ${filtros.join(' · ')}` : ''}${excluidos.length ? ` · sin ${excluidos.join(' ni ')}` : ''}`;
   if (d.meses.length) $('#tb-actualizado').textContent = `Meses cargados: ${mes(d.meses[0].periodo)} a ${mes(d.meses[d.meses.length - 1].periodo)}`;
 
   if (!Number(k.items)) {
@@ -1689,6 +1703,7 @@ function dibujarTablero(d) {
         <div style="height:${Math.max(200, d.aduanas.length * 28)}px"><canvas id="tb-aduanas"></canvas></div></div></div>
     </div>
     <p class="tb-nota mt-2 mb-0">Fuente: archivos mensuales de importaciones de ARCA. Valores <strong>FOB</strong> por ítem (VUCE e INDEC publican CIF: sus totales son más altos).
+      Por defecto no se suman la energía eléctrica por redes (IC01, despachos por estimación) ni el egreso de Tierra del Fuego, igual que en la Matriz.
       A diferencia de los tableros oficiales, estos datos llegan hasta cada despacho e importador.</p>`;
 
   dibujarMosaico($('#tb-mosaico'), d.paises);
@@ -1813,6 +1828,7 @@ $('#b-limpiar-tablero').addEventListener('click', () => {
   $('#f-tablero').reset();
   tbEstado.pais = '';
   tbEstado.ncm = '';
+  tbEstado.grupos = null;   // vuelve a los de por defecto
   cargarTablero();
 });
 
@@ -1821,7 +1837,12 @@ function irADespachos({ ncm, aduana, etiqueta }) {
   const pais = tbEstado.pais;
   const nombrePais = pais ? (tbEstado.datos.paises.find((p) => p.codigo === pais)?.descrip || pais) : '';
   const partes = [etiqueta, pais && `origen ${nombrePais}`].filter(Boolean);
-  listaEstado.extra = (ncm || pais) ? { ncm: ncm || undefined, origen: pais || undefined, etiqueta: partes.join(' · ') } : null;
+  // Los grupos del tablero también filtran la lista, para que los despachos sumen lo mismo
+  const todos = tbEstado.datos.grupos.every((g) => g.incluido);
+  if (!todos) partes.push(`sólo ${tbEstado.datos.grupos.filter((g) => g.incluido).map((g) => g.descrip.replace(/ \(.*\)$/, '').toLowerCase()).join(', ')}`);
+  listaEstado.extra = (ncm || pais || !todos)
+    ? { ncm: ncm || undefined, origen: pais || undefined, grupos: todos ? undefined : tbEstado.grupos.join(','), etiqueta: partes.join(' · ') }
+    : null;
   $('#f-lista').reset();
   listaEstado.orden = 'despacho';
   listaEstado.dir = 'desc';
