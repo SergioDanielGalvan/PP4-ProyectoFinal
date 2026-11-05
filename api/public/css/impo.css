@@ -483,3 +483,9 @@ fieldset.grupos legend { font-size: 0.75rem; letter-spacing: 0.03em; }
   border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 999px; padding: 0.15rem 0.6rem; cursor: default;
 }
 @media print { .tc-dolar { display: none !important; } }
+
+/* Cotizaciones: la columna del tipo vendedor, resaltada */
+#r-cotizaciones td.vendedor, #r-cotizaciones th.vendedor {
+  background-color: #e8f0fd; font-weight: 700; color: #0f2f6b;
+}
+#r-cotizaciones tr.dolar td { border-bottom: 2px solid #c9d8f2; }

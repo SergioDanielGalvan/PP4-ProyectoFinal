@@ -4,6 +4,7 @@ const ctrl = require('../controllers/impo.controller');
 const router = Router();
 
 router.get('/periodos', ctrl.periodos);
+router.get('/cotizaciones', ctrl.cotizaciones);   // tipo de cambio aduanero de ARCA por fecha
 router.get('/catalogos', ctrl.catalogos);   // regiones, países y aduanas para los filtros
 router.get('/tablero', ctrl.tablero);      // indicadores y rankings de la pestaña Tablero
 router.get('/matriz', ctrl.matriz);

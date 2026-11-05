@@ -21,7 +21,7 @@ que registraron en la auditoría. Sin `DB_USER` o `JWT_SECRET` en el
 `.env`, se saltean en lugar de fallar.
 
 Evidencia de la última ejecución: [`salida-npm-test.txt`](salida-npm-test.txt)
-y [`salida-npm-test.png`](salida-npm-test.png) — 57 pruebas (20 unitarias y 37 de integración), 57 correctas.
+y [`salida-npm-test.png`](salida-npm-test.png) — 61 pruebas (24 unitarias y 37 de integración), 61 correctas.
 
 ## Pruebas unitarias (`api/test/unit/`)
 
@@ -33,6 +33,7 @@ Funciones puras, sin base de datos.
 | `ncm.test.js` | Validación de partida, subpartida y NCM, y armado de rangos | Acepta 4, 6 u 8 dígitos con o sin puntos; rechaza 3, 5, 7 o 9 dígitos con error 400; `84` da el rango 84000000–84999999; rechaza rango invertido | ✔ 4 de 4 |
 | `sqlLibre.test.js` | Control del SQL libre (sólo admin) | Deja pasar SELECT, WITH, SHOW y EXPLAIN; frena DELETE, UPDATE, DROP e INSERT, dos sentencias juntas (aun escondidas detrás de un comentario), la tabla `usuarios`, SLEEP, LOAD_FILE e INTO OUTFILE | ✔ 5 de 5 |
 | `auditoria.test.js` | Auditoría: clasificación de cada pedido y armado del detalle | Cada ruta y método da su acción (ingreso, ingreso fallido o bloqueado, alta, cambio o baja de usuario, SQL libre, consulta); los parámetros `clave`, `token` o `password` nunca se guardan; el usuario escrito en un login fallido se guarda en ascii y hasta 40 caracteres; los filtros de la consulta rechazan acciones inexistentes, fechas mal escritas y rangos invertidos | ✔ 4 de 4 |
+| `cotizaciones.test.js` | Tipo de cambio aduanero de ARCA, con el sitio simulado (sin Internet) | Lee código, descripción, vendedor y comprador de la tabla (con punto o coma decimal); sigue la redirección, postea con la cookie de sesión y los campos ocultos del formulario, con día y mes sin cero adelante; para un lunes retrocede sábado y domingo hasta la publicación del viernes; sin dólar o sin publicaciones en 10 días responde un error claro | ✔ 4 de 4 |
 | `usuarios.test.js` | Validación de los datos de usuario | Pasa el usuario a minúsculas y rechaza menos de 3 caracteres o espacios; clave de 10 a 72 caracteres; sólo roles `admin` y `consulta` | ✔ 3 de 3 |
 
 ## Pruebas de integración (`api/test/integracion/`)
@@ -214,3 +215,12 @@ Sobre la base de prueba, filtrando año 2026 y aduana Ezeiza:
 |---|---|---|
 | Partida 8471 con origen China y aduana Ezeiza | Sólo esas importaciones; los filtros figuran debajo del título y en el CSV | [`s-01-subpartidas-filtros.png`](s-01-subpartidas-filtros.png) |
 | Clic en una NCM | Abre Precios por NCM con los mismos filtros ya elegidos | [`s-02-precios-con-filtros.png`](s-02-precios-con-filtros.png) |
+
+## Prueba desde la interfaz (Cotizaciones)
+
+Con el sitio de ARCA simulado (los valores de la captura son inventados):
+
+| Paso | Esperado | Captura |
+|---|---|---|
+| Pestaña Cotizaciones, despachos del lunes 02/11/2026 | Toma la publicación del viernes 30/10 y lo avisa; el dólar primero; el tipo vendedor resaltado; pase contra el dólar y variación contra la publicación anterior | [`co-01-cotizaciones.png`](co-01-cotizaciones.png) |
+| Buscar "peso" | Quedan los tres pesos (chileno, mexicano, uruguayo) | — |

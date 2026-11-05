@@ -132,6 +132,9 @@
       <button class="nav-link" role="tab" aria-selected="false" data-panel="p-matriz">
         <i class="bi bi-bar-chart-fill me-1"></i> Matriz
       </button>
+      <button class="nav-link" role="tab" aria-selected="false" data-panel="p-cotizaciones">
+        <i class="bi bi-currency-exchange me-1"></i> Cotizaciones
+      </button>
       <!-- Sólo se muestra a los administradores -->
       <button class="nav-link" role="tab" aria-selected="false" data-panel="p-usuarios" id="tab-usuarios" hidden>
         <i class="bi bi-people-fill me-1"></i> Usuarios
@@ -447,6 +450,37 @@
       </section>
 
       <!-- Panel Usuarios (sólo administradores) -->
+      <!-- Panel Cotizaciones: tipo de cambio aduanero de ARCA (cotizaciones MARIA) -->
+      <section id="p-cotizaciones" class="panel" hidden>
+        <div class="mb-3">
+          <h2 class="h4 mb-1">Tipo de cambio aduanero</h2>
+          <p class="text-secondary small mb-0">Cotizaciones que publica ARCA para liquidar en el SIM. Para los despachos de un día vale la publicación del día hábil anterior.</p>
+        </div>
+        <div class="card card-filtro mb-3">
+          <div class="card-body">
+            <form id="f-cotizaciones" class="row g-2 align-items-end">
+              <div class="col-sm-6 col-md-4 col-lg-3">
+                <label for="co-fecha" class="form-label small fw-semibold text-secondary">Despachos del día</label>
+                <div class="input-group">
+                  <button type="button" class="btn btn-outline-secondary" id="co-anterior" title="Día anterior" aria-label="Día anterior"><i class="bi bi-chevron-left"></i></button>
+                  <input type="date" id="co-fecha" class="form-control" required>
+                  <button type="button" class="btn btn-outline-secondary" id="co-siguiente" title="Día siguiente" aria-label="Día siguiente"><i class="bi bi-chevron-right"></i></button>
+                </div>
+              </div>
+              <div class="col-sm-6 col-md-4 col-lg-3">
+                <label for="co-buscar" class="form-label small fw-semibold text-secondary">Buscar moneda</label>
+                <input id="co-buscar" class="form-control" placeholder="Código o nombre (EURO, 060, REAL…)" autocomplete="off">
+              </div>
+              <div class="col-md-4 col-lg-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Consultar</button>
+                <button type="button" id="co-hoy" class="btn btn-outline-secondary">Hoy</button>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div id="r-cotizaciones"></div>
+      </section>
+
       <section id="p-usuarios" class="panel" hidden>
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
           <div>

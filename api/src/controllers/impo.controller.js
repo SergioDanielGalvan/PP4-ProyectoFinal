@@ -230,6 +230,23 @@ const triangulaciones = handler(async (req, res) => {
   }));
 });
 
+// Tipo de cambio aduanero de ARCA para los despachos de una fecha (AAAA-MM-DD; por defecto hoy)
+const cotizacionesAfip = require('../services/cotizacionesAfip');
+const cotizaciones = handler(async (req, res) => {
+  const hoy = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  const fecha = (req.query.fecha || hoy).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || Number.isNaN(Date.parse(`${fecha}T12:00:00Z`))) {
+    throw new HttpError(400, 'La fecha va como AAAA-MM-DD, por ejemplo 2026-11-05.');
+  }
+  if (fecha > hoy) throw new HttpError(400, 'No hay cotizaciones para fechas futuras.');
+  if (fecha < '2000-01-01') throw new HttpError(400, 'La fecha es demasiado antigua.');
+  const r = await cotizacionesAfip.cotizacionesConVariacion(fecha);
+  // Descripción del KIT cuando ARCA no la trae
+  const { divisas } = await model.catalogos();
+  const kit = new Map((divisas || []).map((d) => [d.codigo, d.descrip]));
+  res.json({ ...r, monedas: r.monedas.map((m) => ({ ...m, descripcion: m.descripcion || kit.get(m.codigo) || '' })) });
+});
+
 const catalogos = handler(async (req, res) => {
   res.json(await model.catalogos());
 });
@@ -269,6 +286,7 @@ const sugerirImportadores = handler(async (req, res) => {
 });
 
 module.exports = {
+  cotizaciones,
   tablero,
   listarImportadores,
   despachosDeImportador,

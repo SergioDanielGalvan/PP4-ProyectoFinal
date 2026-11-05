@@ -250,7 +250,8 @@ async function catalogos() {
   const [paises] = await pool.query(
     "SELECT Codigo AS codigo, Descrip AS descrip FROM paises WHERE Codigo REGEXP '^[1-9][0-9]{2}$' ORDER BY Descrip");
   const [aduanas] = await pool.query('SELECT Codigo AS codigo, Descrip AS descrip FROM aduanas ORDER BY Descrip');
-  const datos = { regiones: REGIONES, paises, aduanas };
+  const [divisas] = await pool.query('SELECT Codigo AS codigo, Descrip AS descrip FROM divisas ORDER BY Descrip');
+  const datos = { regiones: REGIONES, paises, aduanas, divisas };
   cacheCatalogos = { hora: Date.now(), datos };
   return datos;
 }

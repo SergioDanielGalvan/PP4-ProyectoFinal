@@ -1866,6 +1866,114 @@ window.addEventListener('resize', () => {
   tbRedibujo = setTimeout(() => { if (tbEstado.datos && $('#tb-mosaico')) dibujarMosaico($('#tb-mosaico'), tbEstado.datos.paises); }, 200);
 });
 
+// ---------- cotizaciones (tipo de cambio aduanero de ARCA) ----------
+// La API lee la página de cotizaciones MARIA de ARCA para la fecha de despacho
+// elegida; el tipo VENDEDOR es el que se usa al liquidar y va resaltado.
+const coEstado = { datos: null, cargada: false, pedido: 0 };
+const hoyAr = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+const fechaAr = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '');
+const tc = (v, dec = 4) => new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: dec }).format(v);
+
+async function cargarCotizaciones() {
+  const destino = $('#r-cotizaciones');
+  if (!$('#co-fecha').value) $('#co-fecha').value = hoyAr();
+  $('#co-fecha').max = hoyAr();
+  $('#co-siguiente').disabled = $('#co-fecha').value >= hoyAr();
+  coEstado.cargada = true;
+  const pedido = ++coEstado.pedido;
+  destino.innerHTML = '<p class="nota">Consultando la página de cotizaciones de ARCA (puede tardar unos segundos)…</p>';
+  try {
+    const r = await api('/cotizaciones', { fecha: $('#co-fecha').value });
+    if (pedido !== coEstado.pedido) return;
+    coEstado.datos = r;
+    dibujarCotizaciones();
+  } catch (err) {
+    if (pedido === coEstado.pedido) mensaje(destino, err.message, true);
+  }
+}
+
+function monedasOrdenadas() {
+  const texto = $('#co-buscar').value.trim().toUpperCase();
+  return coEstado.datos.monedas
+    .filter((m) => !texto || m.codigo.includes(texto) || (m.descripcion || '').toUpperCase().includes(texto))
+    .sort((a, b) => (a.codigo === 'DOL' ? -1 : b.codigo === 'DOL' ? 1 : (a.descripcion || a.codigo).localeCompare(b.descripcion || b.codigo, 'es')));
+}
+
+function dibujarCotizaciones() {
+  const r = coEstado.datos;
+  const destino = $('#r-cotizaciones');
+  const lista = monedasOrdenadas();
+  const variacion = (v) => {
+    if (v === null || v === undefined) return '<span class="text-secondary">—</span>';
+    if (Math.abs(v) < 0.00005) return '<span class="text-secondary">0 %</span>';
+    return `<span class="${v > 0 ? 'text-danger' : 'text-success'}">${v > 0 ? '▲' : '▼'} ${fmtNum.format(Math.round(Math.abs(v) * 10000) / 100)} %</span>`;
+  };
+  const filas = lista.map((m) => `<tr class="${m.codigo === 'DOL' ? 'dolar' : ''}">
+    <td class="codigo">${esc(m.codigo)}</td>
+    <td>${esc(m.descripcion)}</td>
+    <td class="n vendedor">$ ${tc(m.vendedor)}</td>
+    <td class="n">$ ${tc(m.comprador)}</td>
+    <td class="n">${tc(m.pase_vendedor, 6)}</td>
+    <td class="n">${variacion(m.variacion_vendedor)}</td></tr>`);
+  const avisoFecha = r.fecha_publicacion !== sumarDiasFecha(r.fecha_despacho, -1)
+    ? ` <span class="badge text-bg-warning">la última publicación antes del ${fechaAr(r.fecha_despacho)}</span>` : '';
+  destino.innerHTML = `
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-2">
+      <div>
+        <h3 class="h6 fw-bold mb-1">Para despachos del ${fechaAr(r.fecha_despacho)} · publicado por ARCA el ${fechaAr(r.fecha_publicacion)}${avisoFecha}</h3>
+        <p class="small text-secondary mb-0">${num(lista.length)} de ${num(r.monedas.length)} monedas · Tipo de cambio en pesos; pase = moneda / dólar vendedor${r.fecha_publicacion_anterior ? ` · Variación contra la publicación del ${fechaAr(r.fecha_publicacion_anterior)}` : ''}</p>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="button" id="b-cotizaciones-excel" class="btn btn-sm btn-outline-secondary">Exportar (CSV)</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.print()">Imprimir</button>
+      </div>
+    </div>`
+    + (lista.length
+      ? tabla([{ titulo: 'Código' }, { titulo: 'Moneda' }, { titulo: '<span class="vendedor">Vendedor</span>', n: true },
+        { titulo: 'Comprador', n: true }, { titulo: 'Pase vendedor', n: true }, { titulo: 'Variación vendedor', n: true }], filas)
+        .replace('<th class="n"><span class="vendedor">Vendedor</span></th>', '<th class="n vendedor">Vendedor</th>')
+      : '<p class="nota">Ninguna moneda coincide con la búsqueda.</p>')
+    + `<p class="tb-nota mt-2 mb-0">Fuente: ${esc(r.fuente)}. Es el tipo de cambio para liquidar en el SIM; la liquidación oficial la hace el SIM de Aduana.</p>`;
+}
+
+function sumarDiasFecha(iso, n) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function exportarCotizaciones() {
+  const r = coEstado.datos;
+  const lineas = [
+    ['SISTEMA COMEX - TIPO DE CAMBIO ADUANERO'],
+    ['Despachos del', fechaAr(r.fecha_despacho)], ['Publicado por ARCA el', fechaAr(r.fecha_publicacion)], [],
+    ['Codigo', 'Moneda', 'Vendedor', 'Comprador', 'Pase vendedor', 'Pase comprador', 'Variacion vendedor %'],
+    ...monedasOrdenadas().map((m) => [m.codigo, m.descripcion, importe(m.vendedor), importe(m.comprador),
+      String(m.pase_vendedor).replace('.', ','), String(m.pase_comprador).replace('.', ','),
+      m.variacion_vendedor === null ? '' : importe(m.variacion_vendedor * 100)]),
+  ];
+  const csv = '﻿' + lineas.map((f) => f.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+  const enlace = document.createElement('a');
+  enlace.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  enlace.download = `TipoCambio_${r.fecha_despacho}.csv`;
+  enlace.click();
+  setTimeout(() => URL.revokeObjectURL(enlace.href), 1000);
+}
+
+$('#f-cotizaciones').addEventListener('submit', (e) => { e.preventDefault(); cargarCotizaciones(); });
+$('#co-fecha').addEventListener('change', () => { if ($('#co-fecha').value) cargarCotizaciones(); });
+$('#co-anterior').addEventListener('click', () => { $('#co-fecha').value = sumarDiasFecha($('#co-fecha').value || hoyAr(), -1); cargarCotizaciones(); });
+$('#co-siguiente').addEventListener('click', () => {
+  const siguiente = sumarDiasFecha($('#co-fecha').value || hoyAr(), 1);
+  if (siguiente > hoyAr()) return;
+  $('#co-fecha').value = siguiente;
+  cargarCotizaciones();
+});
+$('#co-hoy').addEventListener('click', () => { $('#co-fecha').value = hoyAr(); cargarCotizaciones(); });
+$('#co-buscar').addEventListener('input', () => { if (coEstado.datos) dibujarCotizaciones(); });
+$('#r-cotizaciones').addEventListener('click', (e) => { if (e.target.id === 'b-cotizaciones-excel') exportarCotizaciones(); });
+document.querySelector('[data-panel="p-cotizaciones"]').addEventListener('click', () => { if (!coEstado.cargada) cargarCotizaciones(); });
+
 // ---------- autocompletado ----------
 // Lista de sugerencias debajo de un campo mientras se escribe. Se maneja con
 // el mouse o con el teclado (flechas, Enter, Escape). No usa <datalist>: el
