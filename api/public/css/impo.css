@@ -476,3 +476,10 @@ tr.actual td { background-color: #e0ebff !important; }
 
 /* Título "Operaciones incluidas" (Tablero y Matriz): Bootstrap no trae fs-7 */
 fieldset.grupos legend { font-size: 0.75rem; letter-spacing: 0.03em; }
+
+/* Tipo de cambio en la barra superior */
+.tc-dolar {
+  display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 999px; padding: 0.15rem 0.6rem; cursor: default;
+}
+@media print { .tc-dolar { display: none !important; } }

@@ -85,6 +85,15 @@
       </div>
 
       <div class="d-flex align-items-center gap-3">
+        <!-- Tipo de cambio del dólar oficial (js/tc.js); oculto en pantallas chicas -->
+        <div class="d-none d-lg-block">
+          <span id="tc-dolar" class="tc-dolar d-none text-light small" role="status">
+            <i class="bi bi-currency-dollar text-success"></i>
+            <span class="text-secondary">Oficial</span>
+            <strong class="tc-valor"></strong>
+          </span>
+        </div>
+
         <!-- Selector Período -->
         <div class="d-flex align-items-center text-light gap-2">
           <label for="periodo" class="small fw-semibold text-secondary d-none d-sm-inline"><i class="bi bi-calendar3"></i> Período:</label>
@@ -659,5 +668,6 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="js/impo.js"></script>
+  <script src="js/tc.js"></script>
 </body>
 </html>
