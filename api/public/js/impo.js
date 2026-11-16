@@ -1378,6 +1378,12 @@ async function cargarMatriz() {
   }
 }
 
+// Textos y grilla de los gráficos: Chart.js los dibuja dentro del canvas, así que
+// el modo oscuro del navegador no los puede aclarar. Un gris intermedio se lee sobre
+// fondo blanco y sobre fondo oscuro (contraste ~3,9:1 y ~4,4:1); la grilla, gris translúcido.
+const TEXTO_GRAFICO = '#768390';
+const GRILLA_GRAFICO = 'rgba(128, 128, 128, 0.25)';
+
 function dibujarMatriz() {
   const d = matrizEstado.datos;
   const vista = matrizEstado.vista;
@@ -1429,17 +1435,17 @@ function dibujarMatriz() {
       animation: false,
       interaction: { mode: 'nearest', intersect: true },
       scales: {
-        x: { stacked: true, grid: { display: false }, ticks: { color: '#5b6b74' } },
+        x: { stacked: true, grid: { display: false }, ticks: { color: TEXTO_GRAFICO } },
         y: {
           stacked: true,
           max: vista === 'pct' ? 100 : undefined,
-          grid: { color: '#e3e8e6' },
+          grid: { color: GRILLA_GRAFICO },
           border: { display: false },
-          ticks: { color: '#5b6b74', callback: (v) => (vista === 'pct' ? `${v} %` : `${fmtNum.format(v / 1e6)} M`) },
+          ticks: { color: TEXTO_GRAFICO, callback: (v) => (vista === 'pct' ? `${v} %` : `${fmtNum.format(v / 1e6)} M`) },
         },
       },
       plugins: {
-        legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12, color: '#1d2b36', padding: 14 } },
+        legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12, color: TEXTO_GRAFICO, padding: 14 } },
         tooltip: {
           callbacks: {
             label: (ctx) => {
@@ -1709,7 +1715,7 @@ function dibujarTablero(d) {
   dibujarMosaico($('#tb-mosaico'), d.paises);
 
   const color = AZUL_TABLERO;
-  const ejeMillones = { grid: { color: '#e3e8e6' }, border: { display: false }, ticks: { color: '#5b6b74', callback: (v) => enMillones(v) } };
+  const ejeMillones = { grid: { color: GRILLA_GRAFICO }, border: { display: false }, ticks: { color: TEXTO_GRAFICO, callback: (v) => enMillones(v) } };
   const cursor = (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; };
 
   // Meses: el elegido, resaltado; clic = elegir ese período
@@ -1721,7 +1727,7 @@ function dibujarTablero(d) {
     },
     options: {
       maintainAspectRatio: false, animation: false,
-      scales: { x: { grid: { display: false }, ticks: { color: '#5b6b74' } }, y: ejeMillones },
+      scales: { x: { grid: { display: false }, ticks: { color: TEXTO_GRAFICO } }, y: ejeMillones },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${millones(c.raw)} · ${num(d.meses[c.dataIndex].despachos)} despachos` } } },
       onHover: cursor,
       onClick: (evt, els) => {
@@ -1740,7 +1746,7 @@ function dibujarTablero(d) {
     data: { labels: d.ncm.map((n) => (window.innerWidth < 768 ? n.ncm : `${n.ncm} - ${corto(n.descripcion, 38)}`)), datasets: [{ data: d.ncm.map((n) => n.fob), backgroundColor: color, borderRadius: 2 }] },
     options: {
       indexAxis: 'y', maintainAspectRatio: false, animation: false,
-      scales: { x: { ...ejeMillones, position: 'top' }, y: { grid: { display: false }, ticks: { color: '#1d2b36', font: { size: 11 }, autoSkip: false } } },
+      scales: { x: { ...ejeMillones, position: 'top' }, y: { grid: { display: false }, ticks: { color: TEXTO_GRAFICO, font: { size: 11 }, autoSkip: false } } },
       plugins: { legend: { display: false }, tooltip: { callbacks: { title: (c) => `${d.ncm[c[0].dataIndex].ncm} - ${corto(d.ncm[c[0].dataIndex].descripcion, 60)}`, label: (c) => ` ${millones(c.raw)} · ${num(d.ncm[c.dataIndex].items)} ítems` } } },
       onHover: cursor,
       onClick: (evt, els) => {
@@ -1757,7 +1763,7 @@ function dibujarTablero(d) {
     data: { labels: d.aduanas.map((x) => `${x.descrip || x.codigo} (${x.codigo})`), datasets: [{ data: d.aduanas.map((x) => x.fob), backgroundColor: '#1baf7a', borderRadius: 2 }] },
     options: {
       indexAxis: 'y', maintainAspectRatio: false, animation: false,
-      scales: { x: { ...ejeMillones, position: 'top' }, y: { grid: { display: false }, ticks: { color: '#1d2b36', font: { size: 11 }, autoSkip: false } } },
+      scales: { x: { ...ejeMillones, position: 'top' }, y: { grid: { display: false }, ticks: { color: TEXTO_GRAFICO, font: { size: 11 }, autoSkip: false } } },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${millones(c.raw)} · ${num(d.aduanas[c.dataIndex].despachos)} despachos` } } },
       onHover: cursor,
       onClick: (evt, els) => {

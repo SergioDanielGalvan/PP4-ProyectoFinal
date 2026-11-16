@@ -2,6 +2,7 @@
 //
 //  requireAuth     rutas de consulta (/api/impo): sólo exige token si AUTH_ENABLED=true,
 //                  para que la página de prueba siga abierta mientras el front no tenga login.
+//                  Abierta, igual lee el token si viene, para que la auditoría sepa quién fue.
 //  requireLogin    exige token SIEMPRE, sin importar AUTH_ENABLED.
 //  requireRol(...) además del token, exige uno de los roles. Lo usan las rutas
 //                  sensibles (SQL libre, alta de usuarios): nunca quedan abiertas.
@@ -68,9 +69,13 @@ const requireLogin = (req, res, next) => {
   leerToken(req).then((u) => { req.usuario = u; next(); }).catch(next);
 };
 
+// Con AUTH_ENABLED=false las consultas quedan abiertas, pero si el pedido trae
+// un token válido igual se sabe quién es: así la auditoría lo registra a su nombre.
+// Un token vencido o inválido no frena nada: se consulta como anónimo.
 const requireAuth = (req, res, next) => {
-  if (process.env.AUTH_ENABLED !== 'true') return next();
-  return requireLogin(req, res, next);
+  if (process.env.AUTH_ENABLED === 'true') return requireLogin(req, res, next);
+  if (!req.headers.authorization) return next();
+  leerToken(req).then((u) => { req.usuario = u; }).catch(() => {}).finally(() => next());
 };
 
 const requireRol = (...roles) => (req, res, next) => {
