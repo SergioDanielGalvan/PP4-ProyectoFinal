@@ -12,16 +12,16 @@ describe('Subpartidas con filtros', { skip: sinBase }, () => {
   before(async () => {
     await limpiar();
     auth = { Authorization: `Bearer ${await prepararAdmin()}` };
-    // El capítulo con más ítems entre los que entran completos en una respuesta
-    // (hasta 1.000 NCM: con datos reales el 84 o el 85 tienen más), y su origen
-    // y aduana principales
+    // El capítulo con más ítems entre los que entran completos en una respuesta:
+    // hasta 1.000 filas, y cada fila es una NCM con una unidad (con datos reales
+    // el 84 o el 85 tienen más). Después, su origen y aduana principales.
     [[caso]] = await pool.query(`
       SELECT LEFT(p.PosicionSIM, 2) AS capitulo, i.PaisOrigen AS origen, c.AduanaOficializacion AS aduana
       FROM item i JOIN posicion p ON p.IdPosicion = i.IdPosicion
       JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo
       WHERE LEFT(p.PosicionSIM, 2) = (
         SELECT LEFT(p2.PosicionSIM, 2) FROM item i2 JOIN posicion p2 ON p2.IdPosicion = i2.IdPosicion
-        GROUP BY LEFT(p2.PosicionSIM, 2) HAVING COUNT(DISTINCT i2.IdPosicion) <= 1000
+        GROUP BY LEFT(p2.PosicionSIM, 2) HAVING COUNT(DISTINCT i2.IdPosicion, COALESCE(i2.UnidadMedida, '')) <= 1000
         ORDER BY COUNT(*) DESC LIMIT 1)
       GROUP BY capitulo, origen, aduana ORDER BY COUNT(*) DESC LIMIT 1`);
   });
