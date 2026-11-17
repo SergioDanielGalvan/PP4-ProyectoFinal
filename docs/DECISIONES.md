@@ -471,3 +471,30 @@ historial. El DELETE es sólo para la retención (`AUDITORIA_DIAS`, 180 días).
 **Hora.** TiDB Cloud trabaja en UTC: el último ingreso se veía 3 horas
 adelantado en la página. El pool fija `time_zone = '-03:00'` en cada
 conexión (`DB_TIMEZONE`), así `NOW()` da la hora de Argentina en las dos bases.
+
+## 21. Borrar un período desde la página
+
+**Pedido.** Poder quitar un mes de las consultas, o sólo su liquidación, que
+es la tabla más grande y la que menos se consulta: sin ella el mes sigue en el
+Tablero, Precios, Matriz, etc., y sólo falta el detalle de tributos de cada
+despacho.
+
+**Se eligió la página y no un comando de la carga**, aunque eso le da a la API
+un permiso que antes no tenía: DELETE sobre `caratula`, `item` y `liq`
+(`db/09_borrar_periodos.sql`; sin INSERT ni UPDATE, la API sigue sin poder
+cambiar datos). Para que un token robado no alcance: sólo administradores, el
+período escrito a mano como confirmación y la clave propia otra vez, con los
+errores sumando al freno de intentos. Cada intento queda en la auditoría
+(`borrar_periodo`).
+
+**En segundo plano.** Un mes son millones de filas: borrarlas en un solo
+pedido superaría el tiempo de espera de Render y el límite de tamaño de una
+transacción de TiDB. La API responde 202, borra en tandas de 20.000 filas
+(liquidación, ítems y carátulas, de las hojas a la raíz) y la página consulta
+el avance cada 2 segundos. Un solo borrado a la vez. Si Render reinicia el
+servicio a la mitad, lo hecho queda hecho y repetir el pedido termina el resto.
+
+**Recuperar.** No hay papelera: el mes se recupera cargándolo de nuevo desde
+el ZIP de ARCA (`npm run mes`) y copiándolo a TiDB (`npm run tidb -- --periodos
+AAAAMM --reemplazar`).
+

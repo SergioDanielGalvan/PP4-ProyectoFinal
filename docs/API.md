@@ -180,6 +180,7 @@ de usuario queda "rol consulta → admin, clave cambiada", sin la clave.
 | `alta_usuario`, `modif_usuario`, `baja_usuario` | POST, PATCH y DELETE de `/auth/usuarios`, con el detalle de qué cambió |
 | `sql_libre` | `POST /consultas/sql`, con el texto de la consulta |
 | `ver_auditoria` | Consultas a esta misma sección |
+| `borrar_periodo` | `POST /periodos/:periodo/borrar`, con el período y el alcance (también los intentos rechazados) |
 
 | Método y ruta | Parámetros | Devuelve |
 |---|---|---|
@@ -191,3 +192,27 @@ Variables del servidor: `AUDITORIA=false` apaga el registro; `AUDITORIA_DIAS`
 borra nunca). `DB_TIMEZONE` (`-03:00`) fija la hora de la sesión de base,
 para que la auditoría y el último ingreso queden en hora de Argentina también
 en TiDB, que usa UTC.
+
+## 5. Períodos (`/periodos`, sólo admin)
+
+Pestaña Períodos de la página: qué hay cargado en cada mes y borrado de un mes
+completo o sólo de su liquidación (`liq`, la tabla más grande). Requiere
+`db/09_borrar_periodos.sql`, que le da a `comex_api` permiso DELETE sobre
+`caratula`, `item` y `liq` (en TiDB, los tres GRANT del encabezado).
+
+| Método y ruta | Cuerpo / parámetros | Devuelve |
+|---|---|---|
+| `GET /periodos` | — | `{ periodos: [{ periodo, caratulas, items, liquidacion }], trabajo }`, del más reciente al más viejo; `trabajo` es el último borrado (o `null`) |
+| `GET /periodos/trabajo` | — | `{ trabajo: { periodo, alcance, usuario, estado: 'en_curso' \| 'terminado' \| 'error', tabla, borradas: { liq, item, caratula }, inicio, fin, error } }` |
+| `POST /periodos/:periodo/borrar` | `{ alcance: 'liq' \| 'todo', confirmacion: '<el período>', clave: '<clave propia>' }` | **202** con el `trabajo` recién iniciado; el borrado sigue en segundo plano |
+
+- `liq` borra sólo la liquidación: el mes sigue en todas las consultas y el
+  detalle de cada despacho trae `sin_liquidacion: true`. `todo` borra
+  liquidación, ítems y carátulas, en ese orden.
+- Se borra en tandas de 20.000 filas. Si el servicio se reinicia a la mitad,
+  lo borrado queda borrado y volver a pedirlo termina lo que faltaba.
+- Errores: 400 si el período, el alcance o la confirmación no son válidos, o
+  si la clave no es correcta (cuenta para el freno de intentos del login);
+  404 si el mes no tiene datos (o, con `liq`, no tiene liquidación); 409 si ya
+  hay un borrado en curso. Al terminar se vacían las cachés de períodos,
+  matriz, tablero e importadores.

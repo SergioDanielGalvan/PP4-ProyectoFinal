@@ -142,6 +142,9 @@
       <button class="nav-link" role="tab" aria-selected="false" data-panel="p-actividad" id="tab-actividad" hidden>
         <i class="bi bi-activity me-1"></i> Actividad
       </button>
+      <button class="nav-link" role="tab" aria-selected="false" data-panel="p-periodos" id="tab-periodos" hidden>
+        <i class="bi bi-calendar3 me-1"></i> Períodos
+      </button>
     </nav>
 
     <!-- Contenido Principal -->
@@ -534,6 +537,17 @@
         <div id="r-actividad"></div>
       </section>
 
+      <!-- Panel Períodos (sólo administradores): qué hay cargado y borrado de un mes o de su liquidación -->
+      <section id="p-periodos" class="panel" hidden>
+        <div class="mb-3">
+          <h2 class="h4 mb-1">Períodos cargados</h2>
+          <p class="text-secondary small mb-0">Cantidad de despachos, ítems y líneas de liquidación de cada mes. Se puede borrar sólo la liquidación (la tabla más grande: el mes sigue en las consultas, sin los tributos) o el período completo. No se puede deshacer: para recuperarlo hay que volver a cargarlo desde el archivo de ARCA.</p>
+        </div>
+        <div id="pe-mensaje"></div>
+        <div id="pe-trabajo"></div>
+        <div id="r-periodos"></div>
+      </section>
+
     </main>
   </div>
 
@@ -643,6 +657,35 @@
           <button type="button" class="btn btn-danger" id="mc-aceptar">Eliminar</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Confirmar el borrado de un período o de su liquidación -->
+  <div class="modal fade" id="m-borrar" tabindex="-1" aria-labelledby="mb-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <form class="modal-content" id="f-borrar" novalidate>
+        <div class="modal-header">
+          <h5 class="modal-title" id="mb-titulo">Borrar</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <div id="mb-texto" class="mb-3"></div>
+          <input type="text" id="mb-usuario" autocomplete="username" hidden>
+          <div class="mb-3">
+            <label for="mb-confirmacion" class="form-label small fw-semibold">Para confirmar, escribí el período <span class="codigo" id="mb-periodo"></span></label>
+            <input type="text" id="mb-confirmacion" class="form-control" inputmode="numeric" maxlength="6" autocomplete="off" required>
+          </div>
+          <div class="mb-2">
+            <label for="mb-clave" class="form-label small fw-semibold">Tu clave</label>
+            <input type="password" id="mb-clave" class="form-control" maxlength="72" autocomplete="current-password" required>
+          </div>
+          <div class="alert alert-danger py-2 mb-0" id="mb-error" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger" id="mb-aceptar" disabled>Borrar</button>
+        </div>
+      </form>
     </div>
   </div>
 

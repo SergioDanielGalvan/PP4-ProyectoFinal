@@ -19,6 +19,8 @@ test('clasifica cada pedido en una acción', () => {
   assert.equal(accionDe('POST', '/consultas/sql', 200), 'sql_libre');
   assert.equal(accionDe('GET', '/impo/ncm/8471/precios', 200), 'consulta');
   assert.equal(accionDe('GET', '/auditoria/resumen', 200), 'ver_auditoria');
+  assert.equal(accionDe('POST', '/periodos/202607/borrar', 202), 'borrar_periodo');
+  assert.equal(accionDe('GET', '/periodos', 200), 'consulta');
 });
 
 test('nunca guarda claves ni tokens de los parámetros', () => {

@@ -9,6 +9,7 @@ const { requireAuth } = require('./middlewares/auth');
 const { notFound, errorHandler } = require('./middlewares/errors');
 const { auditar } = require('./middlewares/auditoria');
 const auditoriaRoutes = require('./routes/auditoria.routes');
+const periodosRoutes = require('./routes/periodos.routes');
 
 const app = express();
 
@@ -44,6 +45,9 @@ app.use('/api/consultas', consultasRoutes);
 
 // Actividad de los usuarios (sólo admin)
 app.use('/api/auditoria', auditoriaRoutes);
+
+// Períodos cargados y borrado de un mes o de su liquidación (sólo admin)
+app.use('/api/periodos', periodosRoutes);
 
 app.use('/api', notFound);
 app.use(errorHandler);

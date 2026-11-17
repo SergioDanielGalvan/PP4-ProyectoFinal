@@ -76,7 +76,15 @@ async function obtenerDespacho(nro) {
     if (porItem.has(item)) porItem.get(item).aranceles.push(linea);
   }
 
-  return { periodo, ...caratula, items: [...porItem.values()] };
+  // Un período puede estar sin liquidación (se borró para ahorrar espacio, o se
+  // copió a TiDB con --sin-liq): la página lo aclara en vez de decir "Sin aranceles".
+  const sinLiquidacion = liquidacion.length === 0 && !(await hayLiquidacion(periodo));
+  return { periodo, ...caratula, sin_liquidacion: sinLiquidacion, items: [...porItem.values()] };
+}
+
+async function hayLiquidacion(periodo) {
+  const [filas] = await pool.query('SELECT 1 FROM liq WHERE Periodo = ? LIMIT 1', [periodo]);
+  return filas.length > 0;
 }
 
 // Orden de la lista de despachos. "despacho" ordena por el número (año,
@@ -750,7 +758,33 @@ async function despachosDeImportador(id, { periodo, orden, dir, desde, limite })
   return { importador: { ...importador, ...totales }, total: totales.despachos, desde, filas };
 }
 
+// ---------- administración de períodos ----------
+// Cantidades de cada tabla por período, para la pestaña Períodos. Sin caché: la
+// usan sólo los administradores y tiene que reflejar un borrado recién hecho.
+// Contar la liquidación de todos los meses tarda unos segundos en TiDB.
+async function resumenPeriodosAdmin() {
+  const contar = async (tabla) => {
+    const [filas] = await pool.query(`SELECT Periodo AS periodo, COUNT(*) AS n FROM \`${tabla}\` GROUP BY Periodo`);
+    return new Map(filas.map((f) => [Number(f.periodo), Number(f.n)]));
+  };
+  const [caratulas, items, liq] = await Promise.all([contar('caratula'), contar('item'), contar('liq')]);
+  const periodos = [...new Set([...caratulas.keys(), ...items.keys(), ...liq.keys()])].sort((a, b) => b - a);
+  return periodos.map((p) => ({
+    periodo: p, caratulas: caratulas.get(p) || 0, items: items.get(p) || 0, liquidacion: liq.get(p) || 0,
+  }));
+}
+
+// Después de borrar, los resúmenes guardados en memoria ya no valen
+function limpiarCaches() {
+  cachePeriodos = null;
+  cacheMatriz = null;
+  cacheTablero.clear();
+  cacheImportadores.clear();
+}
+
 module.exports = {
+  resumenPeriodosAdmin,
+  limpiarCaches,
   tablero,
   ORDEN_DESPACHOS,
   listarImportadores,

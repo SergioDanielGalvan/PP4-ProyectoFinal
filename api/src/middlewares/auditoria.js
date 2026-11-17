@@ -29,6 +29,7 @@ function accionDe(metodo, ruta, estado) {
     return { POST: 'alta_usuario', PATCH: 'modif_usuario', DELETE: 'baja_usuario' }[metodo] || 'otra';
   }
   if (ruta === '/consultas/sql') return 'sql_libre';
+  if (/^\/periodos\/\d+\/borrar$/.test(ruta)) return 'borrar_periodo';
   if (/^\/auditoria(\/|$)/.test(ruta)) return 'ver_auditoria';
   return metodo === 'GET' ? 'consulta' : 'otra';
 }

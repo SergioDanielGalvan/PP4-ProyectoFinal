@@ -5,7 +5,7 @@ const pool = require('../config/db');
 
 const ACCIONES = [
   'consulta', 'login', 'login_fallido', 'login_bloqueado', 'cambio_clave',
-  'alta_usuario', 'modif_usuario', 'baja_usuario', 'sql_libre', 'ver_auditoria', 'otra',
+  'alta_usuario', 'modif_usuario', 'baja_usuario', 'sql_libre', 'ver_auditoria', 'borrar_periodo', 'otra',
 ];
 
 // Pedidos de escritura todavía en curso (las pruebas los esperan antes de cerrar la base)

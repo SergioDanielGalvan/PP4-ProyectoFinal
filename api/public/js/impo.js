@@ -29,6 +29,7 @@ function mostrarSesion(usuario) {
   const esAdmin = Boolean(usuario && usuario.rol === 'admin');
   $('#tab-usuarios').hidden = !esAdmin;
   $('#tab-actividad').hidden = !esAdmin;
+  $('#tab-periodos').hidden = !esAdmin;
   usuarioActual = usuario || null;
   const s = $('#sesion');
   s.hidden = false;
@@ -152,6 +153,7 @@ document.querySelectorAll('[role="tab"]').forEach((tab) => {
     if (tab.dataset.panel === 'p-matriz' && !matrizEstado.cargada) cargarMatriz();
     if (tab.dataset.panel === 'p-usuarios') cargarUsuarios();
     if (tab.dataset.panel === 'p-actividad') abrirActividad();
+    if (tab.dataset.panel === 'p-periodos') cargarPeriodosAdmin();
   });
 });
 
@@ -159,10 +161,14 @@ document.querySelectorAll('[role="tab"]').forEach((tab) => {
 async function cargarPeriodos() {
   try {
     const periodos = await api('/periodos');
+    // Al recargar (después de borrar un mes) se rehace la lista, menos "Todos"
+    const elegido = $('#periodo').value;
+    $('#periodo').querySelectorAll('option:not([value=""])').forEach((o) => o.remove());
     for (const p of periodos) {
       const texto = `${mes(p.periodo)} (${num(p.caratulas)} despachos)`;
       $('#periodo').insertAdjacentHTML('beforeend', `<option value="${p.periodo}">${texto}</option>`);
     }
+    $('#periodo').value = periodos.some((p) => String(p.periodo) === elegido) ? elegido : '';
   } catch (err) {
     mensaje($('#r-lista'), `No se pudo conectar con la API: ${err.message}`, true);
   }
@@ -217,7 +223,8 @@ async function mostrarDespacho(nro) {
         <td class="n">${usd(it.fob_usd)}</td>
       </tr>`,
       `<tr class="aranceles"><td></td><td colspan="6">${
-        it.aranceles.map((a) => `${esc(a.concepto_desc || a.concepto)}: ${importe(a.monto)}`).join(' · ') || 'Sin aranceles'
+        it.aranceles.map((a) => `${esc(a.concepto_desc || a.concepto)}: ${importe(a.monto)}`).join(' · ')
+          || (d.sin_liquidacion ? 'Liquidación no cargada para este período' : 'Sin aranceles')
       }</td></tr>`,
     ]);
     destino.innerHTML = `
@@ -2265,6 +2272,7 @@ const ACCIONES = {
   baja_usuario: { texto: 'Baja de usuario', clase: 'text-bg-primary' },
   sql_libre: { texto: 'SQL libre', clase: 'text-bg-dark' },
   ver_auditoria: { texto: 'Ver actividad', clase: 'text-bg-secondary' },
+  borrar_periodo: { texto: 'Borrar período', clase: 'text-bg-danger' },
   otra: { texto: 'Otra', clase: 'text-bg-secondary' },
 };
 const actEstado = { preparada: false, filtros: {}, filas: [], hayMas: false };
@@ -2496,3 +2504,139 @@ $('#f-clave').addEventListener('submit', async (e) => {
     $('#mk-guardar').disabled = false;
   }
 });
+
+
+// ---------- períodos (sólo administradores) ----------
+// Lista los meses cargados con sus cantidades y permite borrar un mes completo o
+// sólo su liquidación. La API borra en segundo plano: la página consulta el avance
+// cada 2 segundos hasta que termina.
+const ALCANCE_BORRADO = {
+  liq: { titulo: 'Borrar la liquidación', boton: 'Borrar la liquidación', tablas: 'la liquidación (tributos de cada ítem)' },
+  todo: { titulo: 'Borrar el período completo', boton: 'Borrar el período', tablas: 'liquidación, ítems y carátulas' },
+};
+const peEstado = { filas: [], borrar: null, consulta: null };
+
+function avisoPeriodos(texto, tipo = 'success') {
+  $('#pe-mensaje').innerHTML = `<div class="alert alert-${tipo} alert-dismissible fade show py-2" role="alert">
+    ${esc(texto)}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button></div>`;
+}
+
+async function cargarPeriodosAdmin() {
+  const destino = $('#r-periodos');
+  destino.innerHTML = '<p class="nota">Contando las filas de cada mes…</p>';
+  try {
+    const r = await enviar('GET', '/periodos');
+    peEstado.filas = r.periodos;
+    dibujarPeriodosAdmin(r.trabajo);
+    if (r.trabajo && r.trabajo.estado === 'en_curso') seguirBorrado();
+  } catch (err) {
+    mensaje(destino, err.status === 403 ? 'Sólo los administradores pueden administrar los períodos.' : err.message, true);
+  }
+}
+
+function dibujarPeriodosAdmin(trabajo) {
+  const ocupado = Boolean(trabajo && trabajo.estado === 'en_curso');
+  const filas = peEstado.filas.map((p) => `<tr>
+      <td>${mes(p.periodo)} <span class="codigo">${p.periodo}</span></td>
+      <td class="n">${num(p.caratulas)}</td>
+      <td class="n">${num(p.items)}</td>
+      <td class="n">${p.liquidacion ? num(p.liquidacion) : '<span class="badge text-bg-secondary">Sin liquidación</span>'}</td>
+      <td class="text-end text-nowrap">
+        <button type="button" class="btn btn-sm btn-outline-danger" data-alcance="liq" data-periodo="${p.periodo}" ${ocupado || !p.liquidacion ? 'disabled' : ''}>Borrar liquidación</button>
+        <button type="button" class="btn btn-sm btn-danger" data-alcance="todo" data-periodo="${p.periodo}" ${ocupado ? 'disabled' : ''}><i class="bi bi-trash"></i> Borrar período</button>
+      </td></tr>`);
+  $('#r-periodos').innerHTML = peEstado.filas.length
+    ? tabla([{ titulo: 'Período' }, { titulo: 'Despachos', n: true }, { titulo: 'Ítems', n: true }, { titulo: 'Líneas de liquidación', n: true }, { titulo: '' }], filas)
+      + `<p class="nota">${peEstado.filas.length} períodos. Un borrado no se puede deshacer: el mes se recupera volviendo a cargarlo desde el archivo de ARCA.</p>`
+    : '<p class="mensaje">No hay períodos cargados.</p>';
+}
+
+const modalBorrar = () => bootstrap.Modal.getOrCreateInstance($('#m-borrar'));
+
+$('#r-periodos').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-alcance]');
+  if (!b) return;
+  const p = peEstado.filas.find((x) => String(x.periodo) === b.dataset.periodo);
+  const a = ALCANCE_BORRADO[b.dataset.alcance];
+  peEstado.borrar = { periodo: p.periodo, alcance: b.dataset.alcance };
+  $('#mb-titulo').textContent = `${a.titulo} de ${mes(p.periodo)}`;
+  const cuanto = b.dataset.alcance === 'liq'
+    ? `${num(p.liquidacion)} líneas de liquidación`
+    : `${num(p.caratulas)} despachos, ${num(p.items)} ítems y ${num(p.liquidacion)} líneas de liquidación`;
+  $('#mb-texto').innerHTML = `Se van a borrar ${esc(a.tablas)} de <strong>${mes(p.periodo)}</strong>: ${cuanto}.
+    ${b.dataset.alcance === 'liq' ? 'El mes sigue en todas las consultas; en el detalle de cada despacho no van a figurar los tributos.' : 'El mes deja de aparecer en todas las consultas.'}
+    <strong>No se puede deshacer.</strong>`;
+  $('#mb-periodo').textContent = p.periodo;
+  $('#mb-usuario').value = usuarioActual ? usuarioActual.usuario : '';
+  $('#mb-confirmacion').value = '';
+  $('#mb-clave').value = '';
+  $('#mb-error').hidden = true;
+  $('#mb-aceptar').textContent = a.boton;
+  $('#mb-aceptar').disabled = true;
+  modalBorrar().show();
+});
+
+// El botón se habilita recién con el período bien escrito y una clave
+const controlarBorrar = () => {
+  $('#mb-aceptar').disabled = !peEstado.borrar
+    || $('#mb-confirmacion').value.trim() !== String(peEstado.borrar.periodo) || !$('#mb-clave').value;
+};
+$('#mb-confirmacion').addEventListener('input', controlarBorrar);
+$('#mb-clave').addEventListener('input', controlarBorrar);
+$('#m-borrar').addEventListener('shown.bs.modal', () => $('#mb-confirmacion').focus());
+
+$('#f-borrar').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if ($('#mb-aceptar').disabled || !peEstado.borrar) return;
+  const { periodo: p, alcance } = peEstado.borrar;
+  $('#mb-aceptar').disabled = true;
+  try {
+    const r = await enviar('POST', `/periodos/${p}/borrar`, { alcance, confirmacion: $('#mb-confirmacion').value.trim(), clave: $('#mb-clave').value });
+    modalBorrar().hide();
+    $('#pe-mensaje').innerHTML = '';
+    dibujarPeriodosAdmin(r.trabajo);
+    seguirBorrado();
+  } catch (err) {
+    $('#mb-error').textContent = err.message;
+    $('#mb-error').hidden = false;
+    controlarBorrar();
+  } finally {
+    $('#mb-clave').value = '';
+  }
+});
+
+const NOMBRE_TABLA = { liq: 'liquidación', item: 'ítems', caratula: 'carátulas' };
+
+function dibujarTrabajo(t) {
+  if (!t || t.estado !== 'en_curso') { $('#pe-trabajo').innerHTML = ''; return; }
+  const hechas = Object.entries(t.borradas).map(([tabla, n]) => `${NOMBRE_TABLA[tabla]}: ${num(n)}`).join(' · ');
+  $('#pe-trabajo').innerHTML = `<div class="alert alert-warning py-2 d-flex align-items-center gap-2" role="status">
+    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+    <span>Borrando ${t.alcance === 'liq' ? 'la liquidación' : 'el período'} ${mes(t.periodo)}, tabla ${NOMBRE_TABLA[t.tabla] || '…'}. Filas borradas: ${hechas}.
+    Puede tardar varios minutos; se puede seguir usando el sistema.</span></div>`;
+}
+
+function seguirBorrado() {
+  clearTimeout(peEstado.consulta);
+  const paso = async () => {
+    let t;
+    try { ({ trabajo: t } = await enviar('GET', '/periodos/trabajo')); } catch { peEstado.consulta = setTimeout(paso, 5000); return; }
+    dibujarTrabajo(t);
+    if (t && t.estado === 'en_curso') { peEstado.consulta = setTimeout(paso, 2000); return; }
+    if (t && t.estado === 'terminado') {
+      const total = Object.values(t.borradas).reduce((a, b) => a + b, 0);
+      avisoPeriodos(`Se borró ${t.alcance === 'liq' ? 'la liquidación de' : 'el período'} ${mes(t.periodo)}: ${num(total)} filas.`);
+    } else if (t && t.estado === 'error') {
+      avisoPeriodos(`El borrado de ${mes(t.periodo)} se cortó: ${t.error}. Lo ya borrado quedó borrado; volver a pedirlo termina lo que falta.`, 'danger');
+    }
+    // Los resúmenes de las otras pestañas ya no valen: se recalculan al volver a abrirlas
+    matrizEstado.cargada = false;
+    tbEstado.periodo = undefined;
+    impEstado.cargada = false;
+    listaEstado.cargada = false;
+    cargarPeriodos();
+    cargarPeriodosAdmin();
+  };
+  peEstado.consulta = setTimeout(paso, 1000);
+}
+

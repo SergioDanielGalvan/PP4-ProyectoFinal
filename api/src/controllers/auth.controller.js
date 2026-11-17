@@ -53,6 +53,18 @@ function registrarFallo(clave) {
   else f.n += 1;
 }
 
+// Pide otra vez la clave propia antes de una operación delicada (borrar un período).
+// Un token robado no alcanza: hace falta la clave, y los errores cuentan para el freno de intentos.
+async function verificarClavePropia(req, clave) {
+  const claveIntentos = `${req.ip}|${req.usuario.usuario}`;
+  controlarIntentos(claveIntentos);
+  const u = await usuarios.buscarParaLogin(req.usuario.usuario);
+  if (!u || !(await bcrypt.compare(String(clave || ''), u.clave_hash))) {
+    registrarFallo(claveIntentos);
+    throw new HttpError(400, 'La clave no es correcta.');
+  }
+}
+
 // ---------- endpoints ----------
 const login = handler(async (req, res) => {
   const usuario = String(req.body?.usuario || '').trim().toLowerCase();
@@ -194,4 +206,4 @@ const eliminarUsuario = handler(async (req, res) => {
   res.json({ ok: true, eliminado: actual.usuario });
 });
 
-module.exports = { login, yo, cambiarClave, listarUsuarios, crearUsuario, modificarUsuario, eliminarUsuario, hashear, claveValida, nombreUsuario, rolValido };
+module.exports = { login, yo, cambiarClave, verificarClavePropia, listarUsuarios, crearUsuario, modificarUsuario, eliminarUsuario, hashear, claveValida, nombreUsuario, rolValido };
