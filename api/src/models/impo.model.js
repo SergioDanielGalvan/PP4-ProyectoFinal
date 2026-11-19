@@ -275,6 +275,7 @@ async function preciosPorNcm(digitos, filtros) {
   const where = filtroPeriodos('i', filtros, params) + filtroProcedenciaAduana('i', 'c', filtros, params);
   const [rows] = await pool.query(`
     SELECT i.PaisOrigen AS pais_origen, p.Descrip AS pais_origen_desc, i.UnidadMedida AS unidad,
+           u.Descrip AS unidad_desc, u.Abreviatura AS unidad_abrev,
            COUNT(DISTINCT i.IdPosicion) AS posiciones,
            COUNT(*)                AS items,
            SUM(i.CantidadUnidades) AS cantidad,
@@ -285,8 +286,9 @@ async function preciosPorNcm(digitos, filtros) {
     FROM item i
     ${filtros.aduanas?.length ? 'JOIN caratula c ON c.IdOperacion = i.IdOperacion AND c.Periodo = i.Periodo' : ''}
     LEFT JOIN paises p ON p.Codigo = i.PaisOrigen
+    LEFT JOIN unidadesmedida u ON u.Codigo = i.UnidadMedida
     WHERE i.IdPosicion IN (?)${where}
-    GROUP BY i.PaisOrigen, p.Descrip, i.UnidadMedida
+    GROUP BY i.PaisOrigen, p.Descrip, i.UnidadMedida, u.Descrip, u.Abreviatura
     ORDER BY fob_usd DESC`, params);
 
   return { ncm: pos.codigo, nivel: pos.nivel, descripcion: pos.descripcion, filtros, origenes: rows };

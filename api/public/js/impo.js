@@ -704,6 +704,17 @@ function obtenerCatalogos() {
   if (!pedidoCatalogos) pedidoCatalogos = api('/catalogos').catch((err) => { pedidoCatalogos = null; throw err; });
   return pedidoCatalogos;
 }
+// Unidad de medida con su código y su abreviatura del KIT: "01 - KG", "04 - M3".
+// Algunas abreviaturas del KIT no dicen nada solas ("1" para unidad, "2 U" para
+// par): en esos casos va la descripción ("07 - Unidad", "08 - Par").
+function unidadTexto(o) {
+  if (!o.unidad) return '';
+  const abrev = String(o.unidad_abrev || '').trim();
+  const desc = String(o.unidad_desc || '').trim().toLowerCase();
+  const texto = /^[A-Za-z]+\d?$/.test(abrev) ? abrev : desc && desc[0].toUpperCase() + desc.slice(1);
+  return texto ? `${o.unidad} - ${texto}` : o.unidad;
+}
+
 const opcionesDe = (lista, texto) => lista.map((x) => `<option value="${esc(x.codigo)}">${esc(texto(x))}</option>`).join('');
 
 // Filtros de origen, procedencia, aduana y rango de períodos. Los usan Precios
@@ -792,7 +803,7 @@ $('#f-ncm').addEventListener('submit', async (e) => {
     const filasOrigen = precios.origenes.map((o) => `
       <tr>
         <td>${codigo(o.pais_origen, o.pais_origen_desc)}</td>
-        <td class="codigo">${esc(o.unidad)}</td>
+        <td title="${esc(o.unidad_desc || '')}">${esc(unidadTexto(o))}</td>
         ${agrupa ? `<td class="n">${num(o.posiciones)}</td>` : ''}
         <td class="n">${o.items}</td>
         <td class="n">${num(o.cantidad)}</td>
@@ -876,7 +887,7 @@ $('#f-ncm').addEventListener('submit', async (e) => {
           lineas.push([
             o.pais_origen_desc || o.pais_origen,
             o.pais_origen,
-            o.unidad,
+            unidadTexto(o),
             ...(agrupa ? [o.posiciones] : []),
             o.items,
             importe(o.cantidad),
@@ -2281,21 +2292,40 @@ const actEstado = { preparada: false, filtros: {}, filas: [], hayMas: false };
 const fechaHora = (v) => (v ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(2, 4)} ${v.slice(11, 19)}` : '');
 const hoy = (diasAtras = 0) => new Date(Date.now() - diasAtras * 864e5).toLocaleDateString('sv-SE');
 
+// Códigos NCM con puntos, como en el resto de la página: 701328 -> 7013.28,
+// 76151000 -> 7615.10.00. La API guarda lo que se escribió (con o sin puntos).
+function ncmLegible(c) {
+  const d = String(c || '').replace(/\D/g, '');
+  if (![2, 4, 6, 8].includes(d.length) || d.length !== String(c).replace(/\./g, '').length) return c;
+  return [d.slice(0, 4), d.slice(4, 6), d.slice(6, 8)].filter(Boolean).join('.');
+}
+
 // Qué pantalla o acción corresponde a cada ruta de la API
 function queHizo(f) {
   const r = f.ruta;
   let m;
   if ((m = r.match(/^\/impo\/despachos\/(.+)$/))) return `Despacho ${m[1]}`;
-  if ((m = r.match(/^\/impo\/ncm\/([^/]+)\/precios$/))) return `Precios de ${m[1]}`;
-  if ((m = r.match(/^\/impo\/ncm\/([^/]+)\/valores-bajos$/))) return `Valores bajos de ${m[1]}`;
+  if ((m = r.match(/^\/impo\/ncm\/([^/]+)\/precios$/))) return `Precios de ${ncmLegible(decodeURIComponent(m[1]))}`;
+  if ((m = r.match(/^\/impo\/ncm\/([^/]+)\/valores-bajos$/))) return `Valores bajos de ${ncmLegible(decodeURIComponent(m[1]))}`;
+  if ((m = r.match(/^\/impo\/importadores\/(\d+)\/despachos$/))) return `Despachos de un importador (n.º ${m[1]})`;
   if ((m = r.match(/^\/consultas\/([^/]+)$/)) && f.accion === 'consulta') return `Consulta guardada ${m[1]}`;
+  if ((m = r.match(/^\/periodos\/(\d+)\/borrar$/))) return `Borrar ${mes(m[1])}`;
   const fijas = {
-    '/impo/despachos': 'Últimos despachos', '/impo/subpartidas': 'Subpartidas', '/impo/importadores': 'Importadores',
-    '/impo/triangulaciones': 'Triangulaciones', '/impo/matriz': 'Matriz', '/auth/usuarios': 'Lista de usuarios',
-    '/auditoria': 'Actividad', '/auditoria/resumen': 'Resumen de actividad', '/consultas': 'Consultas guardadas',
+    '/impo/tablero': 'Tablero', '/impo/despachos': 'Lista de despachos', '/impo/subpartidas': 'Subpartidas',
+    '/impo/importadores': 'Búsqueda de importadores', '/impo/importadores/ranking': 'Grilla de importadores',
+    '/impo/triangulaciones': 'Triangulaciones', '/impo/matriz': 'Matriz', '/impo/cotizaciones': 'Cotizaciones',
+    '/auth/usuarios': 'Lista de usuarios', '/auditoria': 'Actividad', '/auditoria/resumen': 'Resumen de actividad',
+    '/consultas': 'Consultas guardadas', '/periodos': 'Períodos cargados', '/periodos/trabajo': 'Avance del borrado',
   };
   if (f.accion === 'consulta' || f.accion === 'ver_auditoria') return fijas[r] || `${f.metodo} ${r}`;
   return '';   // en ingresos, cambios de usuarios y SQL libre alcanza con la acción y el detalle
+}
+
+// En el detalle también: ncm=701328 -> ncm=7013.28 (y el rango de Subpartidas,
+// que llega como desde/hasta; en otras rutas desde/hasta son períodos o filas)
+function detalleLegible(f) {
+  const claves = f.ruta === '/impo/subpartidas' ? 'ncm|desde|hasta' : 'ncm';
+  return (f.detalle || '').replace(new RegExp(`\\b(${claves})=([\\d.]+)`, 'g'), (_, k, v) => `${k}=${ncmLegible(v)}`);
 }
 
 function filtrosActividad() {
@@ -2367,7 +2397,7 @@ function dibujarResumenActividad(resumen) {
 function filaActividad(f) {
   const a = ACCIONES[f.accion] || ACCIONES.otra;
   const que = queHizo(f);
-  const detalle = f.detalle || '';
+  const detalle = detalleLegible(f);
   const resultado = f.estado < 400
     ? `<span class="text-success">OK</span>${f.filas !== null && f.filas !== undefined ? ` · ${num(f.filas)} filas` : ''}`
     : `<span class="badge text-bg-danger">${f.estado}</span>`;
@@ -2415,7 +2445,7 @@ function exportarActividad() {
     [],
     ['Fecha y hora', 'Usuario', 'Acción', 'Qué hizo', 'Detalle', 'Código HTTP', 'Filas', 'Duración (ms)', 'IP'],
     ...actEstado.filas.map((x) => [fechaHora(x.fecha), x.usuario || '', (ACCIONES[x.accion] || ACCIONES.otra).texto,
-      queHizo(x), x.detalle || '', x.estado, x.filas ?? '', x.duracion_ms, x.ip || '']),
+      queHizo(x), detalleLegible(x), x.estado, x.filas ?? '', x.duracion_ms, x.ip || '']),
   ];
   const csv = '﻿' + lineas.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
   const enlace = document.createElement('a');
