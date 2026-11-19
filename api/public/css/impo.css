@@ -380,6 +380,10 @@ tr.fila-clic:hover td { background-color: #eef4ff; }
 .mosaico .celda:hover { filter: brightness(1.12); }
 .mosaico .celda.apagada { opacity: 0.35; }
 #f-tablero .ac { display: block; width: 100%; }
+#f-tablero .input-group > .ac { width: 1%; }
+#m-lupa mark { padding: 0 1px; background: #fde68a; color: inherit; }
+#m-lupa td { white-space: normal; vertical-align: top; }
+#m-lupa td.n, #m-lupa td.codigo { white-space: nowrap; }
 .mosaico .celda.oscuro-texto { color: #0f172a; }
 .mosaico .celda .pct { font-size: 0.8rem; opacity: 0.9; }
 .ranking-scroll { max-height: 420px; overflow-y: auto; }

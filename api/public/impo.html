@@ -660,6 +660,37 @@
     </div>
   </div>
 
+  <!-- Lupa: buscar una NCM por palabras de su descripción -->
+  <div class="modal fade" id="m-lupa" tabindex="-1" aria-labelledby="ml-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="ml-titulo"><i class="bi bi-search me-1"></i> Buscar NCM por descripción</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <form id="f-lupa" class="row g-2 align-items-end mb-2" novalidate>
+            <div class="col-md-7">
+              <label for="ml-q" class="form-label small fw-semibold text-secondary">Palabras clave</label>
+              <input type="search" id="ml-q" class="form-control" maxlength="200" placeholder="cable cobre · &quot;papel higiénico&quot; · bombas -partes" autocomplete="off">
+            </div>
+            <div class="col-md-3">
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="ml-solo">
+                <label class="form-check-label small" for="ml-solo">Sólo las importadas en el período</label>
+              </div>
+            </div>
+            <div class="col-md-2 d-grid">
+              <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Buscar</button>
+            </div>
+          </form>
+          <p class="small text-secondary mb-3">Tienen que aparecer todas las palabras, en cualquier orden; mayúsculas y acentos no importan. Una frase entre comillas se busca tal cual, y un guion adelante excluye la palabra (<span class="codigo">-partes</span>).</p>
+          <div id="ml-resultado"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Confirmar el borrado de un período o de su liquidación -->
   <div class="modal fade" id="m-borrar" tabindex="-1" aria-labelledby="mb-titulo" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">

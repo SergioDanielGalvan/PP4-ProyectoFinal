@@ -26,3 +26,19 @@ test('arma el rango completando con 0 y con 9', () => {
 test('rechaza un rango invertido', () => {
   assert.throws(() => rangoNcm('8473', '8471'), /menor o igual/);
 });
+
+// ---------- lupa: palabras clave para buscar en la descripción ----------
+const { terminosBusqueda } = require('../../src/utils/ncm');
+
+test('la lupa separa palabras, frases entre comillas y exclusiones', () => {
+  assert.deepEqual(terminosBusqueda('cable  cobre'), { incluir: ['cable', 'cobre'], excluir: [] });
+  assert.deepEqual(terminosBusqueda('"papel higiénico" -rollos'), { incluir: ['papel higiénico'], excluir: ['rollos'] });
+  assert.deepEqual(terminosBusqueda('bombas de agua -partes'), { incluir: ['bombas', 'agua'], excluir: ['partes'] },
+    'las palabras de menos de 3 letras se ignoran');
+});
+
+test('la lupa pide al menos una palabra de 3 letras y no más de 6 términos', () => {
+  for (const malo of ['', 'de la', '-partes', 'uno dos tres cuatro cinco seis siete']) {
+    assert.throws(() => terminosBusqueda(malo), (e) => e instanceof HttpError && e.status === 400, malo);
+  }
+});

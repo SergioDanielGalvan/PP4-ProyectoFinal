@@ -2104,6 +2104,106 @@ autocompletar($('#tr-ncm'), { minimo: minimoNcm, buscar: buscarNcm, alElegir: ()
 autocompletar($('#hasta'), { minimo: minimoNcm, buscar: buscarNcm });
 autocompletar($('#tb-ncm'), { minimo: minimoNcm, buscar: buscarNcm, alElegir: () => $('#f-tablero').requestSubmit() });
 
+// ---------- lupa: buscar NCM por palabras de la descripción ----------
+// Un botón con una lupa al lado de cada campo de NCM abre un buscador por palabras
+// clave. Elegir una posición la copia en ese campo (y, donde corresponde, consulta).
+const lupaEstado = { input: null, alElegir: null, resultados: [], ultima: '' };
+const modalLupa = () => bootstrap.Modal.getOrCreateInstance($('#m-lupa'));
+
+function agregarLupa(input, alElegir) {
+  const caja = input.closest('.ac') || input;
+  const grupo = document.createElement('div');
+  grupo.className = 'input-group';
+  caja.parentNode.insertBefore(grupo, caja);
+  grupo.appendChild(caja);
+  const boton = document.createElement('button');
+  boton.type = 'button';
+  boton.className = 'btn btn-outline-secondary';
+  boton.title = 'Buscar la NCM por palabras de su descripción';
+  boton.setAttribute('aria-label', boton.title);
+  boton.innerHTML = '<i class="bi bi-search"></i>';
+  grupo.appendChild(boton);
+  boton.addEventListener('click', () => {
+    lupaEstado.input = input;
+    lupaEstado.alElegir = alElegir;
+    // Si en el campo hay palabras (no un código), arranca buscándolas
+    const escrito = input.value.trim();
+    if (escrito && !/^[\d.]+$/.test(escrito)) $('#ml-q').value = escrito;
+    modalLupa().show();
+  });
+}
+
+$('#m-lupa').addEventListener('shown.bs.modal', () => {
+  $('#ml-q').focus();
+  $('#ml-q').select();
+  // Busca solo al abrir si hay palabras nuevas (o cambió el período)
+  const clave = `${$('#ml-q').value.trim()}|${periodo()}`;
+  if ($('#ml-q').value.trim() && clave !== lupaEstado.ultima) $('#f-lupa').requestSubmit();
+});
+
+// Marca las palabras buscadas en el texto, sin importar acentos ni mayúsculas
+const baseLetra = (c) => c.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function resaltar(texto, terminos) {
+  const plano = [...texto].map(baseLetra).join('');
+  const marcas = new Array(texto.length).fill(false);
+  for (const t of terminos.map((x) => [...x].map(baseLetra).join(''))) {
+    for (let i = plano.indexOf(t); i !== -1; i = plano.indexOf(t, i + 1)) marcas.fill(true, i, i + t.length);
+  }
+  let html = '';
+  let abierto = false;
+  [...texto].forEach((c, i) => {
+    if (marcas[i] && !abierto) { html += '<mark>'; abierto = true; }
+    if (!marcas[i] && abierto) { html += '</mark>'; abierto = false; }
+    html += esc(c);
+  });
+  return abierto ? `${html}</mark>` : html;
+}
+
+$('#f-lupa').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const destino = $('#ml-resultado');
+  const q = $('#ml-q').value.trim();
+  if (!q) return;
+  lupaEstado.ultima = `${q}|${periodo()}`;
+  destino.innerHTML = '<p class="nota">Buscando…</p>';
+  try {
+    const r = await api('/ncm/buscar', { q, periodo: periodo(), solo_importadas: $('#ml-solo').checked ? '1' : '' });
+    lupaEstado.resultados = r.resultados;
+    if (!r.resultados.length) {
+      destino.innerHTML = `<p class="mensaje">Ninguna NCM tiene ${r.incluir.length > 1 ? 'todas esas palabras' : 'esa palabra'} en su descripción${$('#ml-solo').checked ? ' y se importó en el período' : ''}.</p>`;
+      return;
+    }
+    const enPeriodo = periodo() ? `en ${mes(periodo())}` : 'en todos los meses';
+    const filas = r.resultados.map((n, i) => `<tr class="${n.items ? '' : 'text-secondary'}">
+        <td class="codigo text-nowrap">${esc(n.ncm)}</td>
+        <td><div title="${esc(n.descripcion)}">${resaltar(corto(n.descripcion, 220), r.incluir)}</div>
+          ${n.contexto ? `<div class="small text-secondary" title="${esc(n.contexto)}">${resaltar(corto(n.contexto, 160), r.incluir)}</div>` : ''}</td>
+        <td class="n">${n.items ? num(n.items) : '—'}</td>
+        <td class="n">${n.items ? usd(n.fob_usd) : ''}</td>
+        <td class="text-end"><button type="button" class="btn btn-sm btn-primary" data-usar="${i}">Usar</button></td></tr>`);
+    destino.innerHTML = tabla([{ titulo: 'NCM' }, { titulo: 'Descripción' }, { titulo: `Ítems ${enPeriodo}`, n: true }, { titulo: 'FOB US$', n: true }, { titulo: '' }], filas)
+      + `<p class="nota">${r.mas ? `Hay más de ${num(r.coincidencias)} posiciones con esas palabras: agregá otra para acotar. ` : `${num(r.coincidencias)} posiciones. `}`
+      + 'Primero las que tienen las palabras en su propia descripción (no sólo en la de su partida o capítulo), y entre ellas las más importadas.</p>';
+  } catch (err) {
+    mensaje(destino, err.message, true);
+  }
+});
+
+$('#ml-resultado').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-usar]');
+  if (!b || !lupaEstado.input) return;
+  lupaEstado.input.value = lupaEstado.resultados[Number(b.dataset.usar)].ncm;
+  modalLupa().hide();
+  if (lupaEstado.alElegir) lupaEstado.alElegir();
+});
+$('#ml-solo').addEventListener('change', () => { if ($('#ml-q').value.trim()) $('#f-lupa').requestSubmit(); });
+
+agregarLupa($('#ncm'), () => $('#f-ncm').requestSubmit());
+agregarLupa($('#desde'));
+agregarLupa($('#hasta'));
+agregarLupa($('#tr-ncm'), () => $('#f-tri').requestSubmit());
+agregarLupa($('#tb-ncm'), () => $('#f-tablero').requestSubmit());
+
 // ---------- usuarios (CRUD, sólo administradores) ----------
 // Alta, lista, modificación (nombre, rol, clave, activo) y baja. La API sólo
 // elimina usuarios que nunca ingresaron; a los demás los desactiva.

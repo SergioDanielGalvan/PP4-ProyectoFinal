@@ -11,6 +11,7 @@ router.get('/matriz', ctrl.matriz);
 router.get('/despachos', ctrl.listarDespachos);
 router.get('/despachos/:nro', ctrl.obtenerDespacho);
 router.get('/subpartidas', ctrl.resumenSubpartidas);
+router.get('/ncm/buscar', ctrl.buscarNcm);
 router.get('/ncm/:ncm/precios', ctrl.preciosPorNcm);
 router.get('/ncm/:ncm/valores-bajos', ctrl.valoresBajos);
 router.get('/importadores', ctrl.buscarImportadores);

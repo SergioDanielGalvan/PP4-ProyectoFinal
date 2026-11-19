@@ -37,4 +37,27 @@ function codigoNcm(valor) {
   return digitos;
 }
 
-module.exports = { ncmNormalizada, rangoNcm, codigoNcm };
+// Palabras clave para buscar en la descripción de las NCM (la "lupa").
+//   cable cobre        las dos palabras tienen que aparecer (en cualquier orden)
+//   "papel higienico"  una frase entre comillas, tal cual
+//   -partes            excluye las descripciones que la tienen
+// Cada término tiene 3 caracteres o más; hasta 6 términos. Mayúsculas y acentos
+// no importan (la comparación la hace la base con utf8mb4_unicode_ci).
+function terminosBusqueda(valor) {
+  const texto = String(valor || '').slice(0, 200);
+  const incluir = [];
+  const excluir = [];
+  for (const m of texto.matchAll(/(-?)"([^"]+)"|(-?)(\S+)/g)) {
+    const negado = (m[1] || m[3]) === '-';
+    const termino = (m[2] ?? m[4]).replace(/\s+/g, ' ').trim();
+    if (termino.length < 3) continue;
+    (negado ? excluir : incluir).push(termino);
+  }
+  if (!incluir.length) {
+    throw new HttpError(400, 'Escribí al menos una palabra de 3 letras o más (por ejemplo: cable cobre).');
+  }
+  if (incluir.length + excluir.length > 6) throw new HttpError(400, 'Usá hasta 6 palabras.');
+  return { incluir, excluir };
+}
+
+module.exports = { ncmNormalizada, rangoNcm, codigoNcm, terminosBusqueda };

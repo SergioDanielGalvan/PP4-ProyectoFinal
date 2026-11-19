@@ -515,6 +515,61 @@ async function sugerirNcm({ prefijo, texto, limite }) {
   return rows.map((r) => ({ ...r, descripcion: (r.descripcion || '').slice(0, 120) }));
 }
 
+// ---------- lupa: buscar NCM por palabras de la descripción ----------
+// La descripción del KIT encadena la de la NCM con las de sus niveles superiores
+// ("De peso inferior a 3,5 kg... - Máquinas automáticas... - Reactores nucleares..."):
+// la primera parte es la propia y el resto, el contexto. Una palabra que aparece en
+// la parte propia pesa más que una que sólo está en el contexto.
+const MAX_COINCIDENCIAS = 500;
+const sinAcentos = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+function partesDescripcion(d) {
+  const limpia = String(d || '').replace(/^[\s-]+/, '').replace(/\s+/g, ' ').trim();
+  const i = limpia.indexOf(' - ');
+  return i === -1 ? { propia: limpia, contexto: '' } : { propia: limpia.slice(0, i), contexto: limpia.slice(i + 3) };
+}
+
+async function buscarNcmPorDescripcion({ incluir, excluir, periodo, soloConImportaciones, limite }) {
+  const like = (t) => `%${t.replace(/[\\%_]/g, (x) => `\\${x}`)}%`;
+  const condiciones = [...incluir.map(() => 'p.DescripcionNCM LIKE ?'), ...excluir.map(() => 'p.DescripcionNCM NOT LIKE ?')];
+  const params = [...incluir.map(like), ...excluir.map(like)];
+  // "Sólo con importaciones" se filtra en la base, antes del tope de coincidencias
+  if (soloConImportaciones) {
+    condiciones.push(`EXISTS (SELECT 1 FROM item i WHERE i.IdPosicion = p.IdPosicion${periodo ? ' AND i.Periodo = ?' : ''})`);
+    if (periodo) params.push(periodo);
+  }
+  const [posiciones] = await pool.query(`
+    SELECT p.IdPosicion AS id, p.PosicionSIM AS ncm, p.DescripcionNCM AS descripcion
+    FROM posicion p WHERE ${condiciones.join(' AND ')}
+    ORDER BY p.PosicionSIM LIMIT ?`, [...params, MAX_COINCIDENCIAS + 1]);
+  const mas = posiciones.length > MAX_COINCIDENCIAS;
+  if (mas) posiciones.pop();
+
+  // Operaciones de cada NCM en el período (o en todos), para ver cuáles se importan de verdad
+  const uso = new Map();
+  if (posiciones.length) {
+    const ids = [posiciones.map((p) => p.id)];
+    let filtro = '';
+    if (periodo) { filtro = ' AND Periodo = ?'; ids.push(periodo); }
+    const [filas] = await pool.query(`
+      SELECT IdPosicion AS id, COUNT(*) AS items, SUM(FobTotalDolares) AS fob_usd
+      FROM item WHERE IdPosicion IN (?)${filtro} GROUP BY IdPosicion`, ids);
+    for (const f of filas) uso.set(f.id, { items: Number(f.items), fob_usd: Number(f.fob_usd) });
+  }
+
+  const buscadas = incluir.map(sinAcentos);
+  const resultados = posiciones.map((p) => {
+    const { propia, contexto } = partesDescripcion(p.descripcion);
+    const enPropia = buscadas.filter((t) => sinAcentos(propia).includes(t)).length;
+    const u = uso.get(p.id) || { items: 0, fob_usd: 0 };
+    return { ncm: p.ncm, descripcion: propia, contexto, items: u.items, fob_usd: u.fob_usd, relevancia: enPropia };
+  })
+    // Primero donde las palabras están en la descripción propia, después las más importadas
+    .sort((a, b) => b.relevancia - a.relevancia || b.fob_usd - a.fob_usd || a.ncm.localeCompare(b.ncm));
+
+  return { incluir, excluir, periodo: periodo || null, coincidencias: posiciones.length, mas, resultados: resultados.slice(0, limite) };
+}
+
 // Nombres de importadores: primero los que empiezan con el texto.
 async function sugerirImportadores(texto, limite) {
   const [rows] = await pool.query(`
@@ -785,6 +840,8 @@ function limpiarCaches() {
 }
 
 module.exports = {
+  buscarNcmPorDescripcion,
+  partesDescripcion,
   resumenPeriodosAdmin,
   limpiarCaches,
   tablero,

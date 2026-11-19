@@ -1,7 +1,7 @@
 const model = require('../models/impo.model');
 const { HttpError } = require('../middlewares/errors');
 const { validarNroAduana } = require('../utils/nroAduana');
-const { ncmNormalizada, rangoNcm, codigoNcm } = require('../utils/ncm');
+const { ncmNormalizada, rangoNcm, codigoNcm, terminosBusqueda } = require('../utils/ncm');
 
 // ---------- validaciones de parámetros ----------
 function periodoOpcional(valor) {
@@ -278,6 +278,18 @@ const sugerirNcm = handler(async (req, res) => {
   res.json(await model.sugerirNcm({ texto: sinComodines(q), limite }));
 });
 
+// /ncm/buscar?q=cable cobre -partes&periodo=202610&solo_importadas=1 : la lupa
+const buscarNcm = handler(async (req, res) => {
+  const { incluir, excluir } = terminosBusqueda(req.query.q);
+  const r = await model.buscarNcmPorDescripcion({
+    incluir, excluir,
+    periodo: periodoOpcional(req.query.periodo),
+    soloConImportaciones: req.query.solo_importadas === '1',
+    limite: entero(req.query.limite, 100, 1, 200),
+  });
+  res.json(r);
+});
+
 // /sugerencias/importadores?q=zys : 3 letras o más
 const sugerirImportadores = handler(async (req, res) => {
   const q = String(req.query.q || '').trim();
@@ -286,6 +298,7 @@ const sugerirImportadores = handler(async (req, res) => {
 });
 
 module.exports = {
+  buscarNcm,
   cotizaciones,
   tablero,
   listarImportadores,
