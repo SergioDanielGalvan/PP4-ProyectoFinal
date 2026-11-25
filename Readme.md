@@ -146,11 +146,24 @@ La guía completa para el front está en [`docs/API.md`](docs/API.md).
    `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"`.
 4. **Primer administrador**, desde `api/` (usa la base de `api/.env`; la
    clave se pide por teclado):
-   `node scripts/crear-usuario.js --usuario sergio --nombre "Sergio" --rol admin`.
+   `node scripts/crear-usuario.js --usuario sergio --nombre "Sergio" --rol general`.
    Los demás usuarios se crean desde la API (`POST /api/auth/usuarios`).
 
 `AUTH_ENABLED=false` deja abiertas las consultas de datos (modo prueba); la
-administración de usuarios y el SQL libre piden token de admin siempre.
+administración de usuarios y el SQL libre piden token de administrador siempre.
+
+## Empresas y roles (pestaña Empresas)
+
+Cada usuario pertenece a una empresa (el mismo `idEmpresa` del Módulo MARIA).
+Roles: **general** (toda la plataforma: empresas, períodos, SQL libre),
+**admin** (usuarios y actividad de su empresa) y **consulta**. Detalle en
+[`docs/DECISIONES.md`](docs/DECISIONES.md) §22 y [`docs/API.md`](docs/API.md) §6.
+
+1. **MariaDB:** pegar `db/10_empresas.sql` en la pestaña SQL de phpMyAdmin
+   (como root). Crea la tabla `empresa` con la empresa 1, agrega `IdEmpresa` a
+   `usuarios` y `auditoria`, y **pasa los `admin` actuales a `general`**.
+2. **TiDB:** las mismas sentencias en el SQL Editor (el GRANT con el usuario
+   con prefijo, como dice el encabezado del script).
 
 ## Auditoría (pestaña Actividad)
 

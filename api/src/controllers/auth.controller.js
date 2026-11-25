@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const usuarios = require('../models/usuarios.model');
+const empresas = require('../models/empresas.model');
 const { HttpError } = require('../middlewares/errors');
 const { firmarToken, olvidarUsuario, ROLES } = require('../middlewares/auth');
 
@@ -80,25 +81,29 @@ const login = handler(async (req, res) => {
   const u = /^[a-z0-9._-]{1,40}$/.test(usuario) ? await usuarios.buscarParaLogin(usuario) : null;
   // Se compara aunque el usuario no exista, para no revelar cuáles existen por el tiempo de respuesta
   const ok = await bcrypt.compare(clave, u ? u.clave_hash : HASH_RELLENO);
+  if (u) res.locals.auditoria = { usuario, idEmpresa: u.empresa };
   if (!u || !ok || !u.activo) {
     registrarFallo(claveIntentos);
     throw new HttpError(401, 'Usuario o clave incorrectos.');
   }
+  if (u.rol !== 'general' && !u.empresa_activa) {
+    throw new HttpError(401, 'Tu empresa está desactivada: consultá con el administrador.');
+  }
   fallos.delete(claveIntentos);
-  res.locals.auditoria = { usuario: u.usuario, idUsuario: u.id };
+  res.locals.auditoria = { usuario: u.usuario, idUsuario: u.id, idEmpresa: u.empresa };
   await usuarios.registrarIngreso(u.id);
   const token = firmarToken(u, usuarios.huellaClave(u.clave_hash));
   res.json({
     token,
     tipo: 'Bearer',
     expira: process.env.JWT_EXPIRA || '8h',
-    usuario: { id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol },
+    usuario: { id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, empresa: u.empresa, empresa_nombre: u.empresa_nombre },
   });
 });
 
 const yo = handler(async (req, res) => {
-  const { id, usuario, nombre, rol, ultimo_ingreso } = req.usuario;
-  res.json({ id, usuario, nombre, rol, ultimo_ingreso });
+  const { id, usuario, nombre, rol, ultimo_ingreso, empresa, empresa_nombre } = req.usuario;
+  res.json({ id, usuario, nombre, rol, ultimo_ingreso, empresa, empresa_nombre });
 });
 
 // El usuario cambia su propia clave. Las demás sesiones abiertas (otra PC, otro
@@ -122,20 +127,53 @@ const cambiarClave = handler(async (req, res) => {
   res.json({ ok: true, token: firmarToken(u, usuarios.huellaClave(hash)) });
 });
 
-// ----- administración (sólo rol admin) -----
+// ----- administración de usuarios -----
+// general: todos los usuarios de todas las empresas, cualquier rol.
+// admin: sólo los de su empresa, con rol admin o consulta; no toca a los generales.
+const esGeneral = (u) => u.rol === 'general';
+
+function empresaValida(v) {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1) throw new HttpError(400, 'La empresa es un número de empresa (IdEmpresa).');
+  return n;
+}
+
+async function controlarEmpresa(id) {
+  const e = await empresas.buscar(id);
+  if (!e) throw new HttpError(400, `No existe la empresa ${id}.`);
+  return e;
+}
+
+// El usuario a modificar o eliminar tiene que estar al alcance de quien lo pide
+async function usuarioAlcanzable(req) {
+  const id = Number.parseInt(req.params.id, 10);
+  const actual = Number.isInteger(id) ? await usuarios.buscarPorId(id) : null;
+  const visible = actual && (esGeneral(req.usuario) || actual.empresa === req.usuario.empresa);
+  if (!visible) throw new HttpError(404, 'No existe ese usuario.');
+  if (!esGeneral(req.usuario) && esGeneral(actual)) {
+    throw new HttpError(403, 'Sólo un administrador general puede modificar a otro administrador general.');
+  }
+  return actual;
+}
+
 const listarUsuarios = handler(async (req, res) => {
-  res.json(await usuarios.listar());
+  res.json(await usuarios.listar(esGeneral(req.usuario) ? {} : { empresa: req.usuario.empresa }));
 });
 
 const crearUsuario = handler(async (req, res) => {
+  const general = esGeneral(req.usuario);
   const datos = {
     usuario: nombreUsuario(req.body?.usuario),
     nombre: String(req.body?.nombre || '').trim().slice(0, 80),
     rol: rolValido(req.body?.rol || 'consulta'),
+    // Un administrador de empresa crea usuarios sólo en la suya
+    empresa: general && req.body?.empresa !== undefined ? empresaValida(req.body.empresa) : req.usuario.empresa,
     claveHash: await hashear(claveValida(req.body?.clave)),
   };
   if (!datos.nombre) throw new HttpError(400, 'Falta el nombre.');
-  res.locals.auditoria = { detalle: `${datos.usuario} (${datos.nombre}), rol ${datos.rol}` };
+  if (datos.rol === 'general' && !general) throw new HttpError(403, 'Sólo un administrador general puede crear otro administrador general.');
+  if (general) await controlarEmpresa(datos.empresa);
+  res.locals.auditoria = { detalle: `${datos.usuario} (${datos.nombre}), rol ${datos.rol}, empresa ${datos.empresa}` };
   try {
     res.status(201).json(await usuarios.crear(datos));
   } catch (err) {
@@ -149,61 +187,66 @@ function describirCambios(actual, cambios) {
   const partes = [];
   if (cambios.nombre !== undefined && cambios.nombre !== actual.nombre) partes.push(`nombre "${actual.nombre}" → "${cambios.nombre}"`);
   if (cambios.rol !== undefined && cambios.rol !== actual.rol) partes.push(`rol ${actual.rol} → ${cambios.rol}`);
+  if (cambios.empresa !== undefined && cambios.empresa !== actual.empresa) partes.push(`empresa ${actual.empresa} → ${cambios.empresa}`);
   if (cambios.activo !== undefined && cambios.activo !== actual.activo) partes.push(cambios.activo ? 'activado' : 'desactivado');
   if (cambios.claveHash !== undefined) partes.push('clave cambiada');
   return `${actual.usuario}: ${partes.join(', ') || 'sin cambios'}`;
 }
 
-// Cambia nombre, rol, activo o clave (reseteo por el admin). No borra usuarios.
+// Cambia nombre, rol, empresa, activo o clave (reseteo por el admin). No borra usuarios.
 const modificarUsuario = handler(async (req, res) => {
-  const id = Number.parseInt(req.params.id, 10);
-  const actual = Number.isInteger(id) ? await usuarios.buscarPorId(id) : null;
-  if (!actual) throw new HttpError(404, 'No existe ese usuario.');
+  const actual = await usuarioAlcanzable(req);
+  const general = esGeneral(req.usuario);
 
   const cambios = {};
   if (req.body?.nombre !== undefined) cambios.nombre = String(req.body.nombre ?? '').trim().slice(0, 80);
   if (req.body?.rol !== undefined) cambios.rol = rolValido(req.body.rol);
+  if (req.body?.empresa !== undefined) {
+    if (!general) throw new HttpError(403, 'Sólo un administrador general puede pasar un usuario a otra empresa.');
+    cambios.empresa = empresaValida(req.body.empresa);
+    await controlarEmpresa(cambios.empresa);
+  }
   if (req.body?.activo !== undefined) {
     if (typeof req.body.activo !== 'boolean') throw new HttpError(400, 'activo va true o false (sin comillas).');
     cambios.activo = req.body.activo;
   }
   if (req.body?.clave !== undefined) cambios.claveHash = await hashear(claveValida(req.body.clave));
   res.locals.auditoria = { detalle: describirCambios(actual, cambios) };
+  if (cambios.rol === 'general' && !general) throw new HttpError(403, 'Sólo un administrador general puede dar el rol general.');
 
-  // No dejar el sistema sin ningún administrador activo
-  const pierdeAdmin = actual.rol === 'admin' && actual.activo
-    && ((cambios.rol && cambios.rol !== 'admin') || cambios.activo === false);
-  if (pierdeAdmin && (await usuarios.contarAdminsActivos()) <= 1) {
-    throw new HttpError(400, 'Es el único administrador activo: creá otro antes de quitarle el rol o desactivarlo.');
+  // Nadie se quita a sí mismo el rol que tiene ni se desactiva
+  const esElMismo = actual.id === req.usuario.id;
+  if (esElMismo && ((cambios.rol && cambios.rol !== actual.rol) || cambios.activo === false)) {
+    throw new HttpError(400, 'No podés cambiarte el rol ni desactivarte a vos mismo.');
   }
-
-  if (pierdeAdmin && actual.id === req.usuario.id) {
-    throw new HttpError(400, 'No podés quitarte el rol de administrador ni desactivarte a vos mismo.');
+  // No dejar el sistema sin ningún administrador general activo
+  const pierdeGeneral = actual.rol === 'general' && actual.activo
+    && ((cambios.rol && cambios.rol !== 'general') || cambios.activo === false);
+  if (pierdeGeneral && (await usuarios.contarGeneralesActivos()) <= 1) {
+    throw new HttpError(400, 'Es el único administrador general activo: creá otro antes de quitarle el rol o desactivarlo.');
   }
   if (cambios.nombre === '') throw new HttpError(400, 'El nombre no puede quedar vacío.');
 
-  const resultado = await usuarios.actualizar(id, cambios);
-  olvidarUsuario(id);
+  const resultado = await usuarios.actualizar(actual.id, cambios);
+  olvidarUsuario(actual.id);
   res.json(resultado);
 });
 
 // Elimina un usuario que nunca ingresó. Si ya ingresó, responde 409 y el
 // front ofrece desactivarlo: el historial de accesos no se pierde.
 const eliminarUsuario = handler(async (req, res) => {
-  const id = Number.parseInt(req.params.id, 10);
-  const actual = Number.isInteger(id) ? await usuarios.buscarPorId(id) : null;
-  if (!actual) throw new HttpError(404, 'No existe ese usuario.');
+  const actual = await usuarioAlcanzable(req);
   res.locals.auditoria = { detalle: `${actual.usuario} (${actual.nombre})` };
   if (actual.id === req.usuario.id) throw new HttpError(400, 'No podés eliminar tu propio usuario.');
-  if (actual.rol === 'admin' && actual.activo && (await usuarios.contarAdminsActivos()) <= 1) {
-    throw new HttpError(400, 'Es el único administrador activo: no se puede eliminar.');
+  if (actual.rol === 'general' && actual.activo && (await usuarios.contarGeneralesActivos()) <= 1) {
+    throw new HttpError(400, 'Es el único administrador general activo: no se puede eliminar.');
   }
   if (actual.ultimo_ingreso) {
     throw new HttpError(409, `${actual.usuario} ya ingresó al sistema: para conservar el historial no se elimina, se desactiva.`);
   }
-  await usuarios.eliminar(id);
-  olvidarUsuario(id);
+  await usuarios.eliminar(actual.id);
+  olvidarUsuario(actual.id);
   res.json({ ok: true, eliminado: actual.usuario });
 });
 
-module.exports = { login, yo, cambiarClave, verificarClavePropia, listarUsuarios, crearUsuario, modificarUsuario, eliminarUsuario, hashear, claveValida, nombreUsuario, rolValido };
+module.exports = { login, yo, cambiarClave, verificarClavePropia, listarUsuarios, crearUsuario, modificarUsuario, eliminarUsuario, hashear, claveValida, nombreUsuario, rolValido, empresaValida, esGeneral };

@@ -20,8 +20,9 @@ test('exige claves de 10 a 72 caracteres', () => {
   assert.throws(() => claveValida('x'.repeat(73)), /72/);
 });
 
-test('sólo acepta los roles admin y consulta', () => {
+test('sólo acepta los roles general, admin y consulta', () => {
+  assert.equal(rolValido('general'), 'general');
   assert.equal(rolValido('admin'), 'admin');
   assert.equal(rolValido('consulta'), 'consulta');
-  assert.throws(() => rolValido('root'), /admin, consulta/);
+  assert.throws(() => rolValido('root'), /general, admin, consulta/);
 });

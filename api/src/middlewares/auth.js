@@ -6,12 +6,15 @@
 //  requireLogin    exige token SIEMPRE, sin importar AUTH_ENABLED.
 //  requireRol(...) además del token, exige uno de los roles. Lo usan las rutas
 //                  sensibles (SQL libre, alta de usuarios): nunca quedan abiertas.
+//
+// Roles (db/10_empresas.sql): general administra todo el sistema; admin, sólo su
+// empresa (sus usuarios y su actividad); consulta usa las consultas.
 const jwt = require('jsonwebtoken');
 const usuarios = require('../models/usuarios.model');
 const { HttpError } = require('./errors');
 
 const EMISOR = 'comex-api';
-const ROLES = ['admin', 'consulta'];
+const ROLES = ['general', 'admin', 'consulta'];
 
 function secreto() {
   const s = process.env.JWT_SECRET || '';
@@ -48,6 +51,11 @@ function olvidarUsuario(id) {
   cache.delete(String(id));
 }
 
+// Al desactivar o reactivar una empresa cambian todos sus usuarios a la vez
+function olvidarTodos() {
+  cache.clear();
+}
+
 async function leerToken(req) {
   const [tipo, token] = String(req.headers.authorization || '').split(' ');
   if (tipo !== 'Bearer' || !token) throw new HttpError(401, 'Iniciá sesión: falta el token (Authorization: Bearer ...).');
@@ -60,6 +68,7 @@ async function leerToken(req) {
   }
   const usuario = await usuarioVigente(datos.sub);
   if (!usuario || !usuario.activo) throw new HttpError(401, 'El usuario no existe o está desactivado.');
+  if (usuario.rol !== 'general' && !usuario.empresa_activa) throw new HttpError(401, 'Tu empresa está desactivada: consultá con el administrador.');
   if (datos.cv !== usuario.huella) throw new HttpError(401, 'La clave cambió: volvé a iniciar sesión.');
   const { huella, ...sinHuella } = usuario;
   return sinHuella;
@@ -86,4 +95,4 @@ const requireRol = (...roles) => (req, res, next) => {
   }).catch(next);
 };
 
-module.exports = { requireAuth, requireLogin, requireRol, firmarToken, olvidarUsuario, ROLES };
+module.exports = { requireAuth, requireLogin, requireRol, firmarToken, olvidarUsuario, olvidarTodos, ROLES };

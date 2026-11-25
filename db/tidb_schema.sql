@@ -156,16 +156,28 @@ CREATE TABLE IF NOT EXISTS grupo_destinacion (
   Grupo       VARCHAR(10) CHARACTER SET ascii NOT NULL
 );
 
+-- Empresas (las escribe la API). IdEmpresa es el mismo número que en MARIA. Ver db/10_empresas.sql
+CREATE TABLE IF NOT EXISTS empresa (
+  IdEmpresa  INT UNSIGNED NOT NULL PRIMARY KEY,
+  Nombre     VARCHAR(80) NOT NULL,
+  Cuit       CHAR(11) CHARACTER SET ascii NULL UNIQUE,
+  Activa     TINYINT(1) NOT NULL DEFAULT 1,
+  CreadaEn   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+INSERT IGNORE INTO empresa (IdEmpresa, Nombre) VALUES (1, 'Empresa principal');
+
 -- Usuarios de la API (los escribe la API, no se copian de MariaDB)
 CREATE TABLE IF NOT EXISTS usuarios (
   IdUsuario     INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   Usuario       VARCHAR(40) CHARACTER SET ascii NOT NULL UNIQUE,
+  IdEmpresa     INT UNSIGNED NOT NULL DEFAULT 1,
   Nombre        VARCHAR(80) NOT NULL,
   ClaveHash     VARCHAR(100) CHARACTER SET ascii NOT NULL,
   Rol           VARCHAR(10) CHARACTER SET ascii NOT NULL DEFAULT 'consulta',
   Activo        TINYINT(1) NOT NULL DEFAULT 1,
   CreadoEn      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UltimoIngreso DATETIME NULL
+  UltimoIngreso DATETIME NULL,
+  KEY ix_usuarios_empresa (IdEmpresa)
 );
 
 -- Auditoría de la API (la escribe la API; no se copia de MariaDB). Ver db/08_auditoria.sql
@@ -174,6 +186,7 @@ CREATE TABLE IF NOT EXISTS auditoria (
   Fecha       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   IdUsuario   INT UNSIGNED NULL,
   Usuario     VARCHAR(40) CHARACTER SET ascii NULL,
+  IdEmpresa   INT UNSIGNED NULL,
   Accion      VARCHAR(20) CHARACTER SET ascii NOT NULL,
   Metodo      VARCHAR(7) CHARACTER SET ascii NOT NULL,
   Ruta        VARCHAR(200) NOT NULL,
@@ -184,5 +197,6 @@ CREATE TABLE IF NOT EXISTS auditoria (
   Ip          VARCHAR(45) CHARACTER SET ascii NULL,
   KEY ix_auditoria_fecha (Fecha),
   KEY ix_auditoria_usuario (Usuario, Fecha),
-  KEY ix_auditoria_accion (Accion, Fecha)
+  KEY ix_auditoria_accion (Accion, Fecha),
+  KEY ix_auditoria_empresa (IdEmpresa, Fecha)
 );

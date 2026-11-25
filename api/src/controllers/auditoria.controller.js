@@ -10,8 +10,11 @@ function fechaOpcional(v, nombre) {
   return v;
 }
 
-function filtros(q) {
+// `quien` = el usuario que consulta: un administrador de empresa ve sólo la suya;
+// el general ve todas o filtra por una (?empresa=N).
+function filtros(q, quien) {
   const f = {
+    empresa: null,
     usuario: q.usuario ? String(q.usuario).trim().toLowerCase() : null,
     accion: q.accion || null,
     desde: fechaOpcional(q.desde, 'desde'),
@@ -23,6 +26,12 @@ function filtros(q) {
     throw new HttpError(400, `La acción es una de: ${auditoria.ACCIONES.join(', ')}.`);
   }
   if (f.desde && f.hasta && f.desde > f.hasta) throw new HttpError(400, 'La fecha "desde" es posterior a "hasta".');
+  if (quien && quien.rol !== 'general') f.empresa = quien.empresa;
+  else if (q.empresa !== undefined && q.empresa !== '') {
+    const n = Number(q.empresa);
+    if (!Number.isInteger(n) || n < 1) throw new HttpError(400, 'La empresa es un número (IdEmpresa).');
+    f.empresa = n;
+  }
   return f;
 }
 
@@ -33,9 +42,9 @@ function entero(v, defecto, min, max) {
   return n;
 }
 
-// GET /api/auditoria?usuario=&accion=&desde=&hasta=&errores=1&limite=100&antes=<id>
+// GET /api/auditoria?empresa=&usuario=&accion=&desde=&hasta=&errores=1&limite=100&antes=<id>
 const listar = handler(async (req, res) => {
-  res.json(await auditoria.buscar(filtros(req.query), {
+  res.json(await auditoria.buscar(filtros(req.query, req.usuario), {
     antes: entero(req.query.antes, null, 1, Number.MAX_SAFE_INTEGER),
     limite: entero(req.query.limite, 100, 1, 1000),
   }));
@@ -43,7 +52,7 @@ const listar = handler(async (req, res) => {
 
 // GET /api/auditoria/resumen?usuario=&desde=&hasta=
 const resumen = handler(async (req, res) => {
-  res.json(await auditoria.resumen(filtros(req.query)));
+  res.json(await auditoria.resumen(filtros(req.query, req.usuario)));
 });
 
 module.exports = { listar, resumen, filtros };

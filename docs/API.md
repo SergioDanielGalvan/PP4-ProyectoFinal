@@ -31,21 +31,29 @@ fetch(`${API}/impo/periodos`, { headers: { Authorization: `Bearer ${localStorage
 
 | Método y ruta | Quién | Cuerpo / parámetros | Respuesta |
 |---|---|---|---|
-| `POST /auth/login` | todos | `usuario`, `clave` | `{ token, tipo, expira, usuario: { id, usuario, nombre, rol } }` |
-| `GET /auth/yo` | logueado | | `{ id, usuario, nombre, rol, ultimo_ingreso }` |
+| `POST /auth/login` | todos | `usuario`, `clave` | `{ token, tipo, expira, usuario: { id, usuario, nombre, rol, empresa, empresa_nombre } }` |
+| `GET /auth/yo` | logueado | | `{ id, usuario, nombre, rol, empresa, empresa_nombre, ultimo_ingreso }` |
 | `POST /auth/clave` | logueado | `actual`, `nueva` (10 a 72 caracteres, distinta de la actual) | `{ ok: true, token }`: guardar el token nuevo; los anteriores de ese usuario dejan de valer. Clave actual equivocada: 400 (cuenta para el freno de intentos del login) |
-| `GET /auth/usuarios` | admin | | lista de usuarios (sin claves) |
-| `POST /auth/usuarios` | admin | `usuario`, `nombre`, `clave`, `rol` (`admin`/`consulta`) | usuario creado (201) |
-| `PATCH /auth/usuarios/:id` | admin | cualquiera de `nombre`, `rol`, `activo` (`true`/`false`, sin comillas), `clave` | usuario modificado |
-| `DELETE /auth/usuarios/:id` | admin | | `{ ok, eliminado }`. Sólo usuarios que nunca ingresaron; si ya ingresó, 409 (desactivarlo con `PATCH activo: false`) |
+| `GET /auth/usuarios` | general, admin | | lista de usuarios (sin claves), con `empresa`, `empresa_nombre`, `empresa_activa`. El admin ve sólo los de su empresa |
+| `POST /auth/usuarios` | general, admin | `usuario`, `nombre`, `clave`, `rol` (`general`/`admin`/`consulta`), `empresa` (sólo general; si no, la del que crea) | usuario creado (201) |
+| `PATCH /auth/usuarios/:id` | general, admin | cualquiera de `nombre`, `rol`, `activo` (`true`/`false`, sin comillas), `clave`, `empresa` (sólo general) | usuario modificado |
+| `DELETE /auth/usuarios/:id` | general, admin | | `{ ok, eliminado }`. Sólo usuarios que nunca ingresaron; si ya ingresó, 409 (desactivarlo con `PATCH activo: false`) |
 
-- Roles: **consulta** (ve los datos) y **admin** (además administra usuarios y
-  puede ejecutar SQL libre).
+- Roles (`db/10_empresas.sql`):
+  - **general**: administra la plataforma: empresas, usuarios y actividad de
+    todas, Períodos y SQL libre.
+  - **admin** (administrador de empresa): usuarios y actividad de su empresa.
+    No puede crear ni tocar usuarios `general` (403) y los de otras empresas
+    no existen para él (404).
+  - **consulta**: ve los datos.
+- Cada usuario pertenece a una empresa. Si la empresa se desactiva, sus
+  usuarios no pueden entrar (401 "Tu empresa está desactivada...") salvo los
+  `general`.
 - Un usuario que nunca ingresó se puede eliminar. Uno que ya ingresó se
   desactiva (`activo: false`), para conservar el historial; deja de poder usar
   su token en menos de un minuto.
-- Nadie puede eliminarse ni desactivarse a sí mismo, y siempre queda al menos
-  un administrador activo.
+- Nadie puede eliminarse, desactivarse ni cambiarse el rol a sí mismo, y
+  siempre queda al menos un administrador general activo.
 - Login: 5 intentos fallidos seguidos bloquean ese usuario desde esa IP por 15 minutos (429).
 - El token dura 8 horas (configurable con `JWT_EXPIRA`).
 - Cuando cambia la clave de un usuario (la cambia él con `POST /auth/clave` o
@@ -55,7 +63,7 @@ fetch(`${API}/impo/periodos`, { headers: { Authorization: `Bearer ${localStorage
 
 **Modo prueba:** mientras el servidor tenga `AUTH_ENABLED=false`, las rutas
 de consulta (`/impo` y `/consultas`) responden sin token. Las de
-administración y el SQL libre exigen token de admin **siempre**.
+administración y el SQL libre exigen token de administrador (`general` o `admin`, según la ruta) **siempre**.
 
 ## 2. Datos de importación (`/impo`)
 
@@ -153,7 +161,7 @@ SELECT ... WHERE (:periodo IS NULL OR i.Periodo = :periodo) LIMIT :limite
 Tipos: `periodo` (AAAAMM), `entero`, `texto`. El tercer valor es el valor
 por defecto, u `opcional` (llega como NULL si no se manda).
 
-### SQL libre (sólo admin)
+### SQL libre (sólo general)
 
 `POST /consultas/sql` con `{ "sql": "SELECT ...", "limite": 1000 }`.
 
@@ -164,7 +172,7 @@ por defecto, u `opcional` (llega como NULL si no se manda).
 - Errores: 400 (SQL inválido o no permitido, con el mensaje de la base), 408 (tiempo superado).
 - Cada ejecución queda en el log del servidor y en la auditoría, con el usuario que la hizo y el texto de la consulta.
 
-## 4. Actividad de los usuarios (`/auditoria`, sólo admin)
+## 4. Actividad de los usuarios (`/auditoria`, general y admin)
 
 La API registra cada pedido en la tabla `auditoria` (`db/08_auditoria.sql`)
 después de responder, sin demorar la respuesta: quién, qué acción, ruta y
@@ -179,14 +187,19 @@ de usuario queda "rol consulta → admin, clave cambiada", sin la clave.
 | `login`, `login_fallido`, `login_bloqueado` | Ingreso correcto, clave o usuario incorrectos, bloqueo por intentos (429). En los fallidos queda el usuario que se escribió |
 | `cambio_clave` | `POST /auth/clave` |
 | `alta_usuario`, `modif_usuario`, `baja_usuario` | POST, PATCH y DELETE de `/auth/usuarios`, con el detalle de qué cambió |
+| `alta_empresa`, `modif_empresa` | POST y PATCH de `/empresas` |
 | `sql_libre` | `POST /consultas/sql`, con el texto de la consulta |
 | `ver_auditoria` | Consultas a esta misma sección |
 | `borrar_periodo` | `POST /periodos/:periodo/borrar`, con el período y el alcance (también los intentos rechazados) |
 
 | Método y ruta | Parámetros | Devuelve |
 |---|---|---|
-| `GET /auditoria` | `usuario`, `accion`, `desde`, `hasta` (AAAA-MM-DD, ambos incluidos), `errores=1` (sólo código ≥ 400), `limite` (100, hasta 1000), `antes` (id del último registro recibido, para la página siguiente) | `{ filas: [{ id, fecha, usuario, accion, metodo, ruta, detalle, estado, filas, duracion_ms, ip }], hay_mas }`, del más reciente al más viejo |
-| `GET /auditoria/resumen` | `usuario`, `desde`, `hasta` | por usuario: `ingresos`, `consultas`, `ingresos_fallidos`, `cambios_usuarios`, `sql_libre`, `errores`, `ultima` |
+| `GET /auditoria` | `empresa` (sólo general), `usuario`, `accion`, `desde`, `hasta` (AAAA-MM-DD, ambos incluidos), `errores=1` (sólo código ≥ 400), `limite` (100, hasta 1000), `antes` (id del último registro recibido, para la página siguiente) | `{ filas: [{ id, fecha, usuario, empresa, empresa_nombre, accion, metodo, ruta, detalle, estado, filas, duracion_ms, ip }], hay_mas }`, del más reciente al más viejo |
+| `GET /auditoria/resumen` | `empresa` (sólo general), `usuario`, `desde`, `hasta` | por usuario: `ingresos`, `consultas`, `ingresos_fallidos`, `cambios_usuarios`, `sql_libre`, `errores`, `ultima` |
+
+Cada registro guarda la empresa del usuario. El admin de empresa ve siempre
+sólo la actividad de la suya (el parámetro `empresa` se ignora); el general ve
+todo o filtra con `?empresa=N`.
 
 Variables del servidor: `AUDITORIA=false` apaga el registro; `AUDITORIA_DIAS`
 (180) es cuánto se conserva (lo más viejo se borra una vez por día; `0` no
@@ -194,7 +207,7 @@ borra nunca). `DB_TIMEZONE` (`-03:00`) fija la hora de la sesión de base,
 para que la auditoría y el último ingreso queden en hora de Argentina también
 en TiDB, que usa UTC.
 
-## 5. Períodos (`/periodos`, sólo admin)
+## 5. Períodos (`/periodos`, sólo general)
 
 Pestaña Períodos de la página: qué hay cargado en cada mes y borrado de un mes
 completo o sólo de su liquidación (`liq`, la tabla más grande). Requiere
@@ -217,3 +230,20 @@ completo o sólo de su liquidación (`liq`, la tabla más grande). Requiere
   404 si el mes no tiene datos (o, con `liq`, no tiene liquidación); 409 si ya
   hay un borrado en curso. Al terminar se vacían las cachés de períodos,
   matriz, tablero e importadores.
+
+## 6. Empresas (`/empresas`, sólo general)
+
+Requiere `db/10_empresas.sql`. El número de empresa (`id`) es el mismo
+`idEmpresa` del Módulo MARIA, para que los datos de las dos aplicaciones se
+puedan cruzar. Las empresas no se eliminan (la API no tiene permiso DELETE
+sobre `empresa`): se desactivan.
+
+| Método y ruta | Cuerpo | Devuelve |
+|---|---|---|
+| `GET /empresas` | — | `[{ id, nombre, cuit, activa, creada_en, usuarios, usuarios_activos }]` por nombre |
+| `POST /empresas` | `nombre`; opcionales `id` (entero > 0; si falta, el siguiente libre) y `cuit` (11 dígitos con verificador válido; se aceptan guiones) | empresa creada (201). 409 si el número o el CUIT ya existen |
+| `PATCH /empresas/:id` | cualquiera de `nombre`, `cuit` (vacío lo borra), `activa` (`true`/`false`, sin comillas) | empresa modificada |
+
+- No se puede desactivar la empresa propia (400).
+- Al activar o desactivar una empresa, los tokens de sus usuarios se vuelven a
+  controlar en el próximo pedido: desactivada, responden 401.

@@ -145,6 +145,9 @@
       <button class="nav-link" role="tab" aria-selected="false" data-panel="p-periodos" id="tab-periodos" hidden>
         <i class="bi bi-calendar3 me-1"></i> Períodos
       </button>
+      <button class="nav-link" role="tab" aria-selected="false" data-panel="p-empresas" id="tab-empresas" hidden>
+        <i class="bi bi-buildings me-1"></i> Empresas
+      </button>
     </nav>
 
     <!-- Contenido Principal -->
@@ -505,6 +508,10 @@
           <div class="card-body">
             <form id="f-actividad" class="buscador">
               <div class="row g-2 align-items-end">
+                <div class="col-sm-6 col-md-3 col-lg-2" id="ac-empresa-caja" hidden>
+                  <label for="ac-empresa" class="form-label small fw-semibold text-secondary">Empresa</label>
+                  <select id="ac-empresa" class="form-select"><option value="">Todas</option></select>
+                </div>
                 <div class="col-sm-6 col-md-3 col-lg-2">
                   <label for="ac-usuario" class="form-label small fw-semibold text-secondary">Usuario</label>
                   <select id="ac-usuario" class="form-select"><option value="">Todos</option></select>
@@ -521,7 +528,7 @@
                   <label for="ac-hasta" class="form-label small fw-semibold text-secondary">Hasta</label>
                   <input type="date" id="ac-hasta" class="form-control">
                 </div>
-                <div class="col-sm-12 col-md-6 col-lg-4 d-flex gap-2 align-items-center">
+                <div class="col-sm-12 col-md-6 col-lg d-flex gap-2 align-items-center">
                   <button type="submit" class="btn btn-primary">Buscar</button>
                   <button type="button" id="b-limpiar-actividad" class="btn btn-outline-secondary">Limpiar</button>
                   <div class="form-check mb-0 ms-1">
@@ -548,6 +555,18 @@
         <div id="r-periodos"></div>
       </section>
 
+      <!-- Panel Empresas (sólo administrador general) -->
+      <section id="p-empresas" class="panel" hidden>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <h2 class="h4 mb-1">Empresas</h2>
+            <p class="text-secondary small mb-0">Cada usuario pertenece a una empresa. El número puede ser el mismo <span class="codigo">idEmpresa</span> de MARIA. Una empresa no se elimina: se desactiva, y sus usuarios dejan de poder entrar.</p>
+          </div>
+          <button type="button" class="btn btn-primary" id="e-nueva"><i class="bi bi-plus-lg me-1"></i> Nueva empresa</button>
+        </div>
+        <div id="e-mensaje"></div>
+        <div id="r-empresas"></div>
+      </section>
     </main>
   </div>
 
@@ -613,11 +632,16 @@
             <input id="mu-nombre" class="form-control" maxlength="80" required>
             <div class="invalid-feedback">El nombre es obligatorio.</div>
           </div>
+          <div class="mb-3" id="mu-empresa-caja" hidden>
+            <label for="mu-empresa" class="form-label small fw-semibold">Empresa</label>
+            <select id="mu-empresa" class="form-select"></select>
+          </div>
           <div class="mb-3">
             <label for="mu-rol" class="form-label small fw-semibold">Rol</label>
             <select id="mu-rol" class="form-select">
               <option value="consulta">Consulta: ve los datos</option>
-              <option value="admin">Administrador: además gestiona usuarios y ejecuta SQL</option>
+              <option value="admin">Administrador de empresa: además gestiona los usuarios de su empresa y ve su actividad</option>
+              <option value="general">Administrador general: todas las empresas, períodos y SQL</option>
             </select>
           </div>
           <div class="mb-3">
@@ -638,6 +662,42 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
           <button type="submit" class="btn btn-primary" id="mu-guardar">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Alta y modificación de empresas -->
+  <div class="modal fade" id="m-empresa" tabindex="-1" aria-labelledby="me-titulo" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="f-empresa" novalidate>
+        <div class="modal-header">
+          <h5 class="modal-title" id="me-titulo">Nueva empresa</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="me-editando">
+          <div class="mb-3">
+            <label for="me-id" class="form-label small fw-semibold">Número (opcional)</label>
+            <input id="me-id" class="form-control" inputmode="numeric" maxlength="10" autocomplete="off">
+            <div class="form-text" id="me-id-ayuda">El idEmpresa de MARIA, para que coincidan. Vacío: el siguiente libre. No se puede cambiar después.</div>
+            <div class="invalid-feedback">Tiene que ser un número entero mayor que cero.</div>
+          </div>
+          <div class="mb-3">
+            <label for="me-nombre" class="form-label small fw-semibold">Nombre o razón social</label>
+            <input id="me-nombre" class="form-control" maxlength="80" required>
+            <div class="invalid-feedback">El nombre es obligatorio.</div>
+          </div>
+          <div class="mb-3">
+            <label for="me-cuit" class="form-label small fw-semibold">CUIT (opcional)</label>
+            <input id="me-cuit" class="form-control font-monospace" maxlength="13" placeholder="30-12345678-9" autocomplete="off">
+            <div class="invalid-feedback">CUIT inválido: 11 dígitos con el dígito verificador correcto.</div>
+          </div>
+          <div class="alert alert-danger py-2 small mt-3 mb-0" id="me-error" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="me-guardar">Guardar</button>
         </div>
       </form>
     </div>

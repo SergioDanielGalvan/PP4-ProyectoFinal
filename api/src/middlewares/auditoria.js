@@ -28,6 +28,9 @@ function accionDe(metodo, ruta, estado) {
   if (/^\/auth\/usuarios(\/|$)/.test(ruta) && metodo !== 'GET') {
     return { POST: 'alta_usuario', PATCH: 'modif_usuario', DELETE: 'baja_usuario' }[metodo] || 'otra';
   }
+  if (/^\/empresas(\/|$)/.test(ruta) && metodo !== 'GET') {
+    return { POST: 'alta_empresa', PATCH: 'modif_empresa' }[metodo] || 'otra';
+  }
   if (ruta === '/consultas/sql') return 'sql_libre';
   if (/^\/periodos\/\d+\/borrar$/.test(ruta)) return 'borrar_periodo';
   if (/^\/auditoria(\/|$)/.test(ruta)) return 'ver_auditoria';
@@ -68,6 +71,7 @@ function armarFila(req, res, inicio, cuerpo) {
   return {
     idUsuario: req.usuario?.id ?? extra.idUsuario ?? null,
     usuario: nombreSeguro(req.usuario?.usuario ?? extra.usuario),
+    idEmpresa: req.usuario?.empresa ?? extra.idEmpresa ?? null,
     accion,
     metodo: req.method,
     ruta: ruta.slice(0, 200),

@@ -25,18 +25,27 @@ let usuarioActual = null;
 let loginPendiente = null;
 
 function mostrarSesion(usuario) {
-  // La pestaña Usuarios sólo existe para administradores (la API igual lo controla)
-  const esAdmin = Boolean(usuario && usuario.rol === 'admin');
+  // Pestañas según el rol (la API igual lo controla):
+  //   general  todo: empresas, usuarios y actividad de todas, períodos
+  //   admin    usuarios y actividad de su empresa
+  //   consulta sólo las consultas
+  const rol = usuario && usuario.rol;
+  const esGeneral = rol === 'general';
+  const esAdmin = esGeneral || rol === 'admin';
   $('#tab-usuarios').hidden = !esAdmin;
   $('#tab-actividad').hidden = !esAdmin;
-  $('#tab-periodos').hidden = !esAdmin;
+  $('#tab-periodos').hidden = !esGeneral;
+  $('#tab-empresas').hidden = !esGeneral;
+  // Si la pestaña abierta deja de corresponder (cambio de sesión), se vuelve a la primera
+  const abierta = document.querySelector('[role="tab"][aria-selected="true"]');
+  if (abierta && abierta.hidden) document.querySelector('[role="tab"]:not([hidden])').click();
   usuarioActual = usuario || null;
   const s = $('#sesion');
   s.hidden = false;
   // Sin sesión se ofrece ingresar: con AUTH_ENABLED=false las consultas
   // andan sin login, pero la administración de usuarios lo necesita
   s.innerHTML = usuario
-    ? `<span>${esc(usuario.nombre || usuario.usuario)}</span>
+    ? `<span>${esc(usuario.nombre || usuario.usuario)}${usuario.empresa_nombre ? ` <span class="small opacity-75 d-none d-md-inline">· ${esc(usuario.empresa_nombre)}</span>` : ''}</span>
        <button type="button" class="btn btn-sm btn-outline-light" id="mi-clave" title="Cambiar mi clave"><i class="bi bi-key"></i><span class="d-none d-md-inline"> Mi clave</span></button>
        <button type="button" class="btn btn-sm btn-outline-light" id="salir">Salir</button>`
     : '<button type="button" class="btn btn-sm btn-outline-light" id="ingresar">Ingresar</button>';
@@ -154,6 +163,7 @@ document.querySelectorAll('[role="tab"]').forEach((tab) => {
     if (tab.dataset.panel === 'p-usuarios') cargarUsuarios();
     if (tab.dataset.panel === 'p-actividad') abrirActividad();
     if (tab.dataset.panel === 'p-periodos') cargarPeriodosAdmin();
+    if (tab.dataset.panel === 'p-empresas') cargarEmpresas();
   });
 });
 
@@ -2209,6 +2219,17 @@ agregarLupa($('#tb-ncm'), () => $('#f-tablero').requestSubmit());
 // elimina usuarios que nunca ingresaron; a los demás los desactiva.
 const fecha = (v) => (v ? new Date(v).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : 'Nunca');
 let listaUsuarios = [];
+let listaEmpresas = [];   // sólo la carga el administrador general
+const esGeneral = () => Boolean(usuarioActual && usuarioActual.rol === 'general');
+const ROLES = {
+  general: '<span class="badge text-bg-danger">Administrador general</span>',
+  admin: '<span class="badge text-bg-primary">Administrador de empresa</span>',
+  consulta: 'Consulta',
+};
+async function traerEmpresas() {
+  if (esGeneral()) listaEmpresas = await enviar('GET', '/empresas');
+  return listaEmpresas;
+}
 
 function avisoUsuarios(texto, tipo = 'success') {
   $('#u-mensaje').innerHTML = `<div class="alert alert-${tipo} alert-dismissible fade show py-2" role="alert">
@@ -2218,26 +2239,29 @@ function avisoUsuarios(texto, tipo = 'success') {
 async function cargarUsuarios() {
   const destino = $('#r-usuarios');
   try {
-    listaUsuarios = await enviar('GET', '/auth/usuarios');
+    const general = esGeneral();
+    [listaUsuarios] = await Promise.all([enviar('GET', '/auth/usuarios'), general ? traerEmpresas() : null]);
     const filas = listaUsuarios.map((u) => {
       const yo = usuarioActual && u.id === usuarioActual.id;
       return `<tr class="${u.activo ? '' : 'text-secondary'}">
         <td class="codigo">${esc(u.usuario)}${yo ? ' <span class="badge text-bg-secondary">vos</span>' : ''}</td>
         <td>${esc(u.nombre)}</td>
-        <td>${u.rol === 'admin' ? '<span class="badge text-bg-primary">Administrador</span>' : 'Consulta'}</td>
+        ${general ? `<td>${esc(u.empresa_nombre || `n.º ${u.empresa}`)}${u.empresa_activa ? '' : ' <span class="badge text-bg-secondary">inactiva</span>'}</td>` : ''}
+        <td>${ROLES[u.rol] || esc(u.rol)}</td>
         <td>${u.activo ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td>
         <td>${esc(fecha(u.ultimo_ingreso))}</td>
         <td class="text-end text-nowrap">
-          <button type="button" class="btn btn-sm btn-outline-primary" data-accion="editar" data-id="${u.id}" title="Modificar"><i class="bi bi-pencil"></i> Modificar</button>
-          ${yo ? '' : (u.activo
+          ${u.rol === 'general' && !general ? '' : `<button type="button" class="btn btn-sm btn-outline-primary" data-accion="editar" data-id="${u.id}" title="Modificar"><i class="bi bi-pencil"></i> Modificar</button>`}
+          ${yo || (u.rol === 'general' && !general) ? '' : (u.activo
             ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-accion="desactivar" data-id="${u.id}">Desactivar</button>`
             : `<button type="button" class="btn btn-sm btn-outline-success" data-accion="activar" data-id="${u.id}">Activar</button>`)}
           ${yo || u.ultimo_ingreso ? '' : `<button type="button" class="btn btn-sm btn-outline-danger" data-accion="eliminar" data-id="${u.id}" title="Eliminar"><i class="bi bi-trash"></i> Eliminar</button>`}
         </td></tr>`;
     });
     destino.innerHTML = tabla([
-      { titulo: 'Usuario' }, { titulo: 'Nombre' }, { titulo: 'Rol' }, { titulo: 'Estado' }, { titulo: 'Último ingreso' }, { titulo: '' },
-    ], filas) + `<p class="nota">${listaUsuarios.length} usuarios. Eliminar aparece sólo en los que nunca ingresaron.</p>`;
+      { titulo: 'Usuario' }, { titulo: 'Nombre' }, ...(general ? [{ titulo: 'Empresa' }] : []),
+      { titulo: 'Rol' }, { titulo: 'Estado' }, { titulo: 'Último ingreso' }, { titulo: '' },
+    ], filas) + `<p class="nota">${listaUsuarios.length} usuarios${general ? '' : ` de ${esc(usuarioActual?.empresa_nombre || 'tu empresa')}`}. Eliminar aparece sólo en los que nunca ingresaron.</p>`;
   } catch (err) {
     mensaje(destino, err.status === 403 ? 'Sólo los administradores pueden ver los usuarios.' : err.message, true);
   }
@@ -2263,6 +2287,16 @@ function abrirFormUsuario(u) {
   $('#mu-usuario').value = u ? u.usuario : '';
   $('#mu-usuario').disabled = Boolean(u);
   $('#mu-nombre').value = u ? u.nombre : '';
+  // Empresa y rol general: sólo los elige el administrador general. El de empresa
+  // da de alta siempre en la suya (la API lo fuerza igual).
+  const general = esGeneral();
+  $('#mu-empresa-caja').hidden = !general;
+  if (general) {
+    $('#mu-empresa').innerHTML = listaEmpresas.map((e) =>
+      `<option value="${e.id}">${esc(e.nombre)} (n.º ${e.id})${e.activa ? '' : ' — inactiva'}</option>`).join('');
+    $('#mu-empresa').value = String(u ? u.empresa : (usuarioActual.empresa ?? 1));
+  }
+  $('#mu-rol').querySelector('option[value="general"]').hidden = !general;
   $('#mu-rol').value = u ? u.rol : 'consulta';
   $('#mu-clave-label').textContent = u ? 'Nueva clave (opcional)' : 'Clave';
   $('#mu-clave-ayuda').textContent = u
@@ -2273,6 +2307,7 @@ function abrirFormUsuario(u) {
   const yo = u && usuarioActual && u.id === usuarioActual.id;
   $('#mu-activo').disabled = Boolean(yo);
   $('#mu-rol').disabled = Boolean(yo);
+  $('#mu-empresa').disabled = Boolean(yo);
   // La clave propia se cambia con "Mi clave", que pide la actual y mantiene la sesión
   $('#mu-clave').disabled = Boolean(yo);
   $('#mu-generar').disabled = Boolean(yo);
@@ -2313,6 +2348,7 @@ $('#f-usuario').addEventListener('submit', async (e) => {
   const datos = { nombre: $('#mu-nombre').value.trim() };
   if (!$('#mu-rol').disabled) datos.rol = $('#mu-rol').value;
   if ($('#mu-clave').value) datos.clave = $('#mu-clave').value;
+  if (esGeneral() && !$('#mu-empresa').disabled) datos.empresa = Number($('#mu-empresa').value);
   $('#mu-guardar').disabled = true;
   try {
     if (id) {
@@ -2369,6 +2405,119 @@ $('#mc-aceptar').addEventListener('click', async () => {
   }
 });
 
+// ---------- empresas (sólo administrador general) ----------
+// Lista, alta, modificación y activar/desactivar. No se eliminan: una empresa
+// desactivada deja a sus usuarios sin poder entrar, pero conserva su historial.
+const modalEmpresa = () => bootstrap.Modal.getOrCreateInstance($('#m-empresa'));
+const cuitLegible = (c) => (c && c.length === 11 ? `${c.slice(0, 2)}-${c.slice(2, 10)}-${c.slice(10)}` : (c || ''));
+
+// Mismo control que la API: 11 dígitos y dígito verificador (pesos 5,4,3,2,7,6,5,4,3,2)
+function cuitCorrecto(texto) {
+  const d = String(texto).replace(/\D/g, '');
+  if (d.length !== 11 || String(texto).replace(/[\d\s-]/g, '')) return false;
+  const suma = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2].reduce((t, p, i) => t + p * Number(d[i]), 0);
+  let dv = 11 - (suma % 11);
+  if (dv === 11) dv = 0;
+  return dv !== 10 && dv === Number(d[10]);
+}
+
+function avisoEmpresas(texto, tipo = 'success') {
+  $('#e-mensaje').innerHTML = `<div class="alert alert-${tipo} alert-dismissible fade show py-2" role="alert">
+    ${esc(texto)}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button></div>`;
+}
+
+async function cargarEmpresas() {
+  const destino = $('#r-empresas');
+  try {
+    await traerEmpresas();
+    const propia = usuarioActual && usuarioActual.empresa;
+    const filas = listaEmpresas.map((e) => `<tr class="${e.activa ? '' : 'text-secondary'}">
+      <td class="n codigo">${e.id}</td>
+      <td>${esc(e.nombre)}${e.id === propia ? ' <span class="badge text-bg-secondary">la tuya</span>' : ''}</td>
+      <td class="codigo">${esc(cuitLegible(e.cuit)) || '—'}</td>
+      <td class="n">${num(e.usuarios_activos)}${e.usuarios !== e.usuarios_activos ? ` <span class="small text-secondary">de ${num(e.usuarios)}</span>` : ''}</td>
+      <td>${e.activa ? '<span class="badge text-bg-success">Activa</span>' : '<span class="badge text-bg-secondary">Inactiva</span>'}</td>
+      <td class="text-end text-nowrap">
+        <button type="button" class="btn btn-sm btn-outline-primary" data-accion="editar" data-id="${e.id}"><i class="bi bi-pencil"></i> Modificar</button>
+        ${e.id === propia ? '' : (e.activa
+          ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-accion="desactivar" data-id="${e.id}">Desactivar</button>`
+          : `<button type="button" class="btn btn-sm btn-outline-success" data-accion="activar" data-id="${e.id}">Activar</button>`)}
+      </td></tr>`);
+    destino.innerHTML = tabla([
+      { titulo: 'N.º', n: true }, { titulo: 'Nombre' }, { titulo: 'CUIT' }, { titulo: 'Usuarios activos', n: true },
+      { titulo: 'Estado' }, { titulo: '' },
+    ], filas) + `<p class="nota">${listaEmpresas.length} empresas. Los administradores generales entran aunque su empresa esté desactivada.</p>`;
+  } catch (err) {
+    mensaje(destino, err.status === 403 ? 'Sólo el administrador general puede ver las empresas.' : err.message, true);
+  }
+}
+
+function abrirFormEmpresa(e) {
+  const f = $('#f-empresa');
+  f.reset();
+  f.querySelectorAll('.is-invalid').forEach((x) => x.classList.remove('is-invalid'));
+  $('#me-error').hidden = true;
+  $('#me-editando').value = e ? e.id : '';
+  $('#me-titulo').textContent = e ? `Modificar ${e.nombre}` : 'Nueva empresa';
+  $('#me-id').value = e ? e.id : '';
+  $('#me-id').disabled = Boolean(e);
+  $('#me-id-ayuda').hidden = Boolean(e);
+  $('#me-nombre').value = e ? e.nombre : '';
+  $('#me-cuit').value = e ? cuitLegible(e.cuit) : '';
+  modalEmpresa().show();
+}
+
+$('#e-nueva').addEventListener('click', () => abrirFormEmpresa(null));
+
+$('#f-empresa').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const editando = $('#me-editando').value;
+  const id = $('#me-id').value.trim();
+  const nombre = $('#me-nombre').value.trim();
+  const cuit = $('#me-cuit').value.trim();
+  let ok = true;
+  const marcar = (el, malo) => { el.classList.toggle('is-invalid', malo); if (malo) ok = false; };
+  if (!editando) marcar($('#me-id'), Boolean(id) && !/^[1-9]\d{0,9}$/.test(id));
+  marcar($('#me-nombre'), !nombre);
+  marcar($('#me-cuit'), Boolean(cuit) && !cuitCorrecto(cuit));
+  if (!ok) return;
+  const datos = { nombre, cuit: cuit.replace(/\D/g, '') };
+  $('#me-guardar').disabled = true;
+  try {
+    if (editando) {
+      const r = await enviar('PATCH', `/empresas/${editando}`, datos);
+      avisoEmpresas(`Se guardaron los cambios de ${r.nombre}.`);
+    } else {
+      if (id) datos.id = Number(id);
+      const r = await enviar('POST', '/empresas', datos);
+      avisoEmpresas(`Se creó la empresa ${r.nombre} (n.º ${r.id}). Ya podés darle usuarios en la pestaña Usuarios.`);
+    }
+    modalEmpresa().hide();
+    cargarEmpresas();
+  } catch (err) {
+    $('#me-error').textContent = err.message;   // 409: número o CUIT repetido
+    $('#me-error').hidden = false;
+  } finally {
+    $('#me-guardar').disabled = false;
+  }
+});
+
+$('#r-empresas').addEventListener('click', async (ev) => {
+  const b = ev.target.closest('button[data-accion]');
+  if (!b) return;
+  const e = listaEmpresas.find((x) => x.id === Number(b.dataset.id));
+  if (!e) return;
+  if (b.dataset.accion === 'editar') return abrirFormEmpresa(e);
+  try {
+    const activa = b.dataset.accion === 'activar';
+    await enviar('PATCH', `/empresas/${e.id}`, { activa });
+    avisoEmpresas(activa
+      ? `${e.nombre} quedó activa: sus usuarios ya pueden entrar.`
+      : `${e.nombre} quedó desactivada: sus usuarios no pueden entrar y sus sesiones abiertas se cerraron.`, activa ? 'success' : 'warning');
+    cargarEmpresas();
+  } catch (err) { avisoEmpresas(err.message, 'danger'); }
+});
+
 // ---------- actividad (auditoría, sólo administradores) ----------
 // Muestra la tabla auditoria: un resumen por usuario y el detalle de cada
 // pedido, del más reciente al más viejo, de a 100 ("Ver más" trae los siguientes).
@@ -2381,6 +2530,8 @@ const ACCIONES = {
   alta_usuario: { texto: 'Alta de usuario', clase: 'text-bg-primary' },
   modif_usuario: { texto: 'Cambio de usuario', clase: 'text-bg-primary' },
   baja_usuario: { texto: 'Baja de usuario', clase: 'text-bg-primary' },
+  alta_empresa: { texto: 'Alta de empresa', clase: 'text-bg-primary' },
+  modif_empresa: { texto: 'Cambio de empresa', clase: 'text-bg-primary' },
   sql_libre: { texto: 'SQL libre', clase: 'text-bg-dark' },
   ver_auditoria: { texto: 'Ver actividad', clase: 'text-bg-secondary' },
   borrar_periodo: { texto: 'Borrar período', clase: 'text-bg-danger' },
@@ -2414,7 +2565,7 @@ function queHizo(f) {
     '/impo/tablero': 'Tablero', '/impo/despachos': 'Lista de despachos', '/impo/subpartidas': 'Subpartidas',
     '/impo/importadores': 'Búsqueda de importadores', '/impo/importadores/ranking': 'Grilla de importadores',
     '/impo/triangulaciones': 'Triangulaciones', '/impo/matriz': 'Matriz', '/impo/cotizaciones': 'Cotizaciones',
-    '/auth/usuarios': 'Lista de usuarios', '/auditoria': 'Actividad', '/auditoria/resumen': 'Resumen de actividad',
+    '/auth/usuarios': 'Lista de usuarios', '/empresas': 'Lista de empresas', '/auditoria': 'Actividad', '/auditoria/resumen': 'Resumen de actividad',
     '/consultas': 'Consultas guardadas', '/periodos': 'Períodos cargados', '/periodos/trabajo': 'Avance del borrado',
   };
   if (f.accion === 'consulta' || f.accion === 'ver_auditoria') return fijas[r] || `${f.metodo} ${r}`;
@@ -2430,6 +2581,7 @@ function detalleLegible(f) {
 
 function filtrosActividad() {
   return {
+    empresa: esGeneral() ? $('#ac-empresa').value : '',
     usuario: $('#ac-usuario').value,
     accion: $('#ac-accion').value,
     desde: $('#ac-desde').value,
@@ -2445,6 +2597,14 @@ async function abrirActividad() {
       + Object.entries(ACCIONES).map(([k, a]) => `<option value="${k}">${a.texto}</option>`).join('');
     $('#ac-desde').value = hoy(6);
     $('#ac-hasta').value = hoy();
+    $('#ac-empresa-caja').hidden = !esGeneral();
+    if (esGeneral()) {
+      try {
+        const empresas = listaEmpresas.length ? listaEmpresas : await traerEmpresas();
+        $('#ac-empresa').innerHTML = '<option value="">Todas</option>'
+          + empresas.map((e) => `<option value="${e.id}">${esc(e.nombre)}</option>`).join('');
+      } catch { /* sin la lista se ve igual la actividad de todas */ }
+    }
     try {
       const lista = listaUsuarios.length ? listaUsuarios : await enviar('GET', '/auth/usuarios');
       $('#ac-usuario').innerHTML = '<option value="">Todos</option>'
@@ -2504,6 +2664,7 @@ function filaActividad(f) {
   return `<tr class="${f.estado >= 400 ? 'table-warning' : ''}">
     <td class="text-nowrap">${esc(fechaHora(f.fecha))}</td>
     <td class="codigo">${esc(f.usuario || '—')}</td>
+    ${esGeneral() ? `<td class="small">${esc(f.empresa_nombre || (f.empresa ? `n.º ${f.empresa}` : '—'))}</td>` : ''}
     <td><span class="badge ${a.clase}">${a.texto}</span></td>
     <td>${que ? `<strong>${esc(que)}</strong>${detalle ? '<br>' : ''}` : ''}<span class="small text-secondary" title="${esc(detalle)}">${esc(corto(detalle, 160))}</span></td>
     <td class="text-nowrap">${resultado}</td>
@@ -2520,7 +2681,8 @@ function dibujarActividad() {
       <button type="button" id="b-actividad-excel" class="btn btn-sm btn-outline-secondary">Exportar (CSV)</button>
     </div>`;
   destino.innerHTML = acciones + tabla([
-    { titulo: 'Fecha y hora' }, { titulo: 'Usuario' }, { titulo: 'Acción' }, { titulo: 'Qué hizo' },
+    { titulo: 'Fecha y hora' }, { titulo: 'Usuario' }, ...(esGeneral() ? [{ titulo: 'Empresa' }] : []),
+    { titulo: 'Acción' }, { titulo: 'Qué hizo' },
     { titulo: 'Resultado' }, { titulo: 'Duración', n: true }, { titulo: 'IP' },
   ], actEstado.filas.map(filaActividad))
     + (actEstado.hayMas ? '<button type="button" id="b-actividad-mas" class="btn btn-outline-primary btn-sm mt-2">Ver más</button>' : '');
@@ -2543,8 +2705,8 @@ function exportarActividad() {
     ['Actividad de los usuarios'],
     [`Desde: ${f.desde || 'inicio'} · Hasta: ${f.hasta || 'hoy'}${f.usuario ? ` · Usuario: ${f.usuario}` : ''}${f.accion ? ` · Acción: ${ACCIONES[f.accion].texto}` : ''}${f.errores ? ' · Sólo errores' : ''}`],
     [],
-    ['Fecha y hora', 'Usuario', 'Acción', 'Qué hizo', 'Detalle', 'Código HTTP', 'Filas', 'Duración (ms)', 'IP'],
-    ...actEstado.filas.map((x) => [fechaHora(x.fecha), x.usuario || '', (ACCIONES[x.accion] || ACCIONES.otra).texto,
+    ['Fecha y hora', 'Usuario', 'Empresa', 'Acción', 'Qué hizo', 'Detalle', 'Código HTTP', 'Filas', 'Duración (ms)', 'IP'],
+    ...actEstado.filas.map((x) => [fechaHora(x.fecha), x.usuario || '', x.empresa_nombre || x.empresa || '', (ACCIONES[x.accion] || ACCIONES.otra).texto,
       queHizo(x), detalleLegible(x), x.estado, x.filas ?? '', x.duracion_ms, x.ip || '']),
   ];
   const csv = '﻿' + lineas.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
@@ -2557,6 +2719,7 @@ function exportarActividad() {
 
 $('#f-actividad').addEventListener('submit', (e) => { e.preventDefault(); buscarActividad(); });
 $('#b-limpiar-actividad').addEventListener('click', () => {
+  $('#ac-empresa').value = '';
   $('#ac-usuario').value = '';
   $('#ac-accion').value = '';
   $('#ac-desde').value = hoy(6);

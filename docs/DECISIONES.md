@@ -498,3 +498,46 @@ servicio a la mitad, lo hecho queda hecho y repetir el pedido termina el resto.
 el ZIP de ARCA (`npm run mes`) y copiándolo a TiDB (`npm run tidb -- --periodos
 AAAAMM --reemplazar`).
 
+## 22. Varias empresas y tres roles
+
+**Pedido.** El sistema lo va a usar más de un despachante (o estudio): cada
+uno tiene que administrar sus propios usuarios y ver sólo su actividad, sin
+ver la de los demás. Tiene que ser compatible con el Módulo MARIA, donde
+todas las tablas (`CARATULA`, `ITEM`, `LIQ`, `CONFIGURACIONMARIA`, ...) ya
+llevan `idEmpresa`.
+
+**Se eligió la opción A: empresa sólo para usuarios y auditoría.** Los datos de
+ARCA son públicos y los mismos para todos, así que no se separan por empresa;
+lo que se separa es quién administra a quién y quién ve qué actividad. Las
+alternativas descartadas: (B) separar también los datos, que no tiene sentido
+con datos públicos y multiplicaría el tamaño de la base; (C) una instalación
+por cliente, que multiplica el mantenimiento y el costo en la nube.
+
+**Modelo** (`db/10_empresas.sql`):
+
+- Tabla `empresa (IdEmpresa, Nombre, Cuit, Activa, CreadaEn)`. `IdEmpresa` no es
+  autoincremental: se puede dar de alta con el mismo número que la empresa
+  tiene en MARIA; sin número, se usa el siguiente libre. El CUIT es opcional y
+  se controla con su dígito verificador.
+- `usuarios.IdEmpresa` y `auditoria.IdEmpresa`.
+- Roles:
+
+| Rol | Puede |
+|---|---|
+| `general` | Todo: empresas, usuarios y actividad de todas las empresas, Períodos, SQL libre |
+| `admin` | Usuarios y actividad de **su** empresa. No ve ni toca a los `general` |
+| `consulta` | Sólo las consultas |
+
+- La migración pasa los `admin` existentes a `general` (eran los dueños de la
+  plataforma) y deja a todos en la empresa 1.
+- Una empresa desactivada deja afuera a sus usuarios (login y tokens), salvo
+  a los `general`, para que la plataforma no quede sin administración.
+- Las empresas no se eliminan, para no perder el historial de auditoría.
+
+**Para MARIA Web.** El mismo esquema sirve tal cual: las tablas de MARIA ya
+filtran por `idEmpresa`, así que allí, además, cada consulta de datos lleva
+`WHERE idEmpresa = <la del usuario>` (en MARIA los datos sí son privados de
+cada empresa). Los tres roles y las reglas de arriba se mantienen; si las dos
+aplicaciones comparten la tabla `empresa` y `usuarios`, un mismo usuario
+entra a las dos con la misma clave.
+

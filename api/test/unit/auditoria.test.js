@@ -37,7 +37,13 @@ test('el usuario escrito en un login fallido se guarda en ascii y hasta 40 carac
 
 test('valida los filtros de la consulta de actividad', () => {
   const f = filtros({ usuario: 'Profesor', accion: 'login', desde: '2026-10-01', hasta: '2026-10-31', errores: '1' });
-  assert.deepEqual(f, { usuario: 'profesor', accion: 'login', desde: '2026-10-01', hasta: '2026-10-31', errores: true });
+  assert.deepEqual(f, { empresa: null, usuario: 'profesor', accion: 'login', desde: '2026-10-01', hasta: '2026-10-31', errores: true });
+  // Un administrador de empresa ve sólo la suya, aunque pida otra; el general elige
+  assert.equal(filtros({ empresa: '7' }, { rol: 'admin', empresa: 3 }).empresa, 3);
+  assert.equal(filtros({}, { rol: 'admin', empresa: 3 }).empresa, 3);
+  assert.equal(filtros({ empresa: '7' }, { rol: 'general', empresa: 1 }).empresa, 7);
+  assert.equal(filtros({}, { rol: 'general', empresa: 1 }).empresa, null);
+  assert.throws(() => filtros({ empresa: 'x' }, { rol: 'general', empresa: 1 }), { status: 400 });
   assert.throws(() => filtros({ accion: 'borrar_todo' }), { status: 400 });
   assert.throws(() => filtros({ desde: '31/10/2026' }), { status: 400 });
   assert.throws(() => filtros({ desde: '2026-10-31', hasta: '2026-10-01' }), { status: 400 });
