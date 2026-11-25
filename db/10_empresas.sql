@@ -34,14 +34,18 @@ CREATE TABLE IF NOT EXISTS comex.empresa (
 
 INSERT IGNORE INTO comex.empresa (IdEmpresa, Nombre) VALUES (1, 'Empresa principal');
 
+-- Columna e índice en dos sentencias: TiDB no deja indexar una columna
+-- que se agrega en el mismo ALTER ("column does not exist").
 ALTER TABLE comex.usuarios
-  ADD COLUMN IF NOT EXISTS IdEmpresa INT UNSIGNED NOT NULL DEFAULT 1 AFTER Usuario,
+  ADD COLUMN IF NOT EXISTS IdEmpresa INT UNSIGNED NOT NULL DEFAULT 1 AFTER Usuario;
+ALTER TABLE comex.usuarios
   ADD INDEX IF NOT EXISTS ix_usuarios_empresa (IdEmpresa);
 
 UPDATE comex.usuarios SET Rol = 'general' WHERE Rol = 'admin';
 
 ALTER TABLE comex.auditoria
-  ADD COLUMN IF NOT EXISTS IdEmpresa INT UNSIGNED NULL AFTER Usuario,
+  ADD COLUMN IF NOT EXISTS IdEmpresa INT UNSIGNED NULL AFTER Usuario;
+ALTER TABLE comex.auditoria
   ADD INDEX IF NOT EXISTS ix_auditoria_empresa (IdEmpresa, Fecha);
 
 GRANT SELECT, INSERT, UPDATE ON comex.empresa TO 'comex_api'@'localhost', 'comex_api'@'10.0.0.%';
